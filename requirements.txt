@@ -1,0 +1,6 @@
+pyjwt
+httpx
+pydantic
+pillow
+numpy
+PyJWT

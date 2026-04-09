@@ -1,0 +1,230 @@
+{
+  "id": "Comfyui-Kling-Wrapper-example",
+  "revision": 0,
+  "last_node_id": 4,
+  "last_link_id": 4,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Comfyui-Kling-Wrapper Client",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        320,
+        210
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "client",
+          "type": "COMFYUI_KLING_WRAPPER_API_CLIENT",
+          "links": null,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Client"
+      },
+      "widgets_values": [
+        "",
+        "",
+        1,
+        "china"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "Comfyui-Kling-Wrapper Text2Video",
+      "pos": [
+        420,
+        20
+      ],
+      "size": [
+        430,
+        520
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "client",
+          "type": "COMFYUI_KLING_WRAPPER_API_CLIENT",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "url",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 0
+        },
+        {
+          "name": "video_id",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Text2Video"
+      },
+      "widgets_values": [
+        "kling-v3",
+        "A quiet street scene at sunrise with subtle camera drift and natural environmental motion.",
+        "",
+        0.5,
+        "pro",
+        "16:9",
+        "5",
+        "None",
+        "horizontal",
+        0.5,
+        "off",
+        "None",
+        "single",
+        ""
+      ]
+    },
+    {
+      "id": 3,
+      "type": "Comfyui-Kling-Wrapper Video Extender",
+      "pos": [
+        870,
+        40
+      ],
+      "size": [
+        360,
+        180
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "client",
+          "type": "COMFYUI_KLING_WRAPPER_API_CLIENT",
+          "link": 2
+        },
+        {
+          "name": "video_id",
+          "type": "STRING",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "url",
+          "type": "STRING",
+          "links": [
+            4
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "video_id",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Video Extender"
+      },
+      "widgets_values": [
+        "",
+        "Continue the shot naturally for a few more moments, keeping the same scene and motion direction."
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Comfyui-Kling-Wrapper Preview Video",
+      "pos": [
+        1290,
+        40
+      ],
+      "size": [
+        430,
+        820
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video_url",
+          "type": "STRING",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "file_path",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Preview Video"
+      },
+      "widgets_values": [
+        "Comfyui-Kling-Wrapper",
+        true
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "COMFYUI_KLING_WRAPPER_API_CLIENT"
+    ],
+    [
+      2,
+      1,
+      0,
+      3,
+      0,
+      "COMFYUI_KLING_WRAPPER_API_CLIENT"
+    ],
+    [
+      3,
+      2,
+      1,
+      3,
+      1,
+      "STRING"
+    ],
+    [
+      4,
+      3,
+      0,
+      4,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9,
+      "offset": [
+        0,
+        0
+      ]
+    },
+    "frontendVersion": "1.42.8"
+  },
+  "version": 0.4
+}
