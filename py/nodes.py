@@ -1535,11 +1535,17 @@ class AdvancedCustomElementCreateNode:
             extra_payload_json="",
     ):
         generator = AdvancedCustomElements()
-        generator.type = element_type
+        element_name = (element_name or "").strip()
         element_description = (element_description or "").strip()
 
-        if element_name.strip():
-            generator.name = element_name.strip()
+        generator.type = element_type
+        generator.element_type = element_type
+        generator.elementType = element_type
+
+        if element_name:
+            generator.name = element_name
+            generator.element_name = element_name
+            generator.elementName = element_name
 
         merged_image_list = []
         if image is not None:
@@ -1552,17 +1558,21 @@ class AdvancedCustomElementCreateNode:
                 raise ValueError("image_subject requires an image input.")
             generator.image = merged_image_list[0]
             generator.image_list = [merged_image_list[0]]
+            generator.imageList = [merged_image_list[0]]
         elif element_type == "multi_image_subject":
             if len(merged_image_list) < 2:
                 raise ValueError("multi_image_subject requires at least two images.")
             generator.image_list = merged_image_list
+            generator.imageList = merged_image_list
         elif element_type == "video_character":
             if not video_url.strip():
                 raise ValueError("video_character requires video_url.")
             generator.video_url = video_url.strip()
+            generator.videoUrl = video_url.strip()
 
         if element_voice_id.strip():
             generator.element_voice_id = element_voice_id.strip()
+            generator.elementVoiceId = element_voice_id.strip()
 
         extra_payload = _parse_json_input(extra_payload_json, "extra_payload_json")
         if extra_payload:
@@ -1581,7 +1591,22 @@ class AdvancedCustomElementCreateNode:
         if not element_description:
             raise ValueError("element_description is required for advanced element creation.")
 
+        if not element_name:
+            element_name = str(
+                getattr(generator, "element_name", "")
+                or getattr(generator, "elementName", "")
+                or getattr(generator, "name", "")
+                or ""
+            ).strip()
+
+        if not element_name:
+            raise ValueError("element_name is required for advanced element creation.")
+
+        generator.name = element_name
+        generator.element_name = element_name
+        generator.elementName = element_name
         generator.element_description = element_description
+        generator.elementDescription = element_description
 
         response = generator.run(client)
         _log_final_unit_deduction(response, "advanced_custom_element_create")

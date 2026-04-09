@@ -4,6 +4,8 @@ from .prediction import ElementPredictionResponse, Prediction
 class AdvancedCustomElements(Prediction):
     name: str
     type: str
+    element_name: str
+    element_type: str
     element_description: str
     image: str
     image_list: list
