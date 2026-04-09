@@ -442,6 +442,7 @@ class KLingAIAPIClient:
                 "access_key": ("STRING", {"multiline": False, "default": ""}),
                 "secret_key": ("STRING", {"multiline": False, "default": ""}),
                 "poll_interval": ("INT", {"default": "1"}),
+                "request_timeout": ("INT", {"default": 30, "min": 5, "max": 300, "step": 1}),
                 "area": (DEFAULT_AREA_OPTIONS,),
             },
         }
@@ -455,7 +456,7 @@ class KLingAIAPIClient:
 
     CATEGORY = NODE_CATEGORY
 
-    def create_client(self, access_key, secret_key, poll_interval, area):
+    def create_client(self, access_key, secret_key, poll_interval, request_timeout, area):
 
         in_china = (area == "china")
 
@@ -471,9 +472,9 @@ class KLingAIAPIClient:
             except KeyError:
                 raise ValueError('unable to find ACCESS_KEY or SECRET_KEY in config.ini')
 
-            client = Client(klingai_api_access_key, klingai_api_scerct_key, in_china)
+            client = Client(klingai_api_access_key, klingai_api_scerct_key, in_china, timeout=request_timeout)
         else:
-            client = Client(access_key, secret_key, in_china)
+            client = Client(access_key, secret_key, in_china, timeout=request_timeout)
 
         client.poll_interval = poll_interval
         return (client,)
@@ -1542,10 +1543,11 @@ class AdvancedCustomElementCreateNode:
         generator.element_type = element_type
         generator.elementType = element_type
 
-        if element_name:
-            generator.name = element_name
-            generator.element_name = element_name
-            generator.elementName = element_name
+        # Keep the newer reference-style payload too for accounts using the upgraded schema.
+        if element_type in ("image_subject", "multi_image_subject"):
+            generator.reference_type = "image_refer"
+        else:  # video_character
+            generator.reference_type = "video_refer"
 
         merged_image_list = []
         if image is not None:
@@ -1553,26 +1555,61 @@ class AdvancedCustomElementCreateNode:
         if image_list is not None:
             merged_image_list.extend(_image_batch_to_base64_list(image_list))
 
-        if element_type == "image_subject":
-            if not merged_image_list:
-                raise ValueError("image_subject requires an image input.")
-            generator.image = merged_image_list[0]
-            generator.image_list = [merged_image_list[0]]
-            generator.imageList = [merged_image_list[0]]
-        elif element_type == "multi_image_subject":
+        if element_type in ("image_subject", "multi_image_subject"):
+            # Kling's advanced element API requires one frontal image plus 1-3
+            # additional reference images of the same subject. Background-only
+            # or scene images do not satisfy this constraint.
             if len(merged_image_list) < 2:
-                raise ValueError("multi_image_subject requires at least two images.")
+                raise ValueError(
+                    "Advanced custom elements require 1 frontal portrait in `image` plus 1-3 additional "
+                    "reference photos of the same subject in `image_list`. "
+                    "Background or scene images do not count as subject reference images."
+                )
+            if len(merged_image_list) > 4:
+                raise ValueError(
+                    "Advanced custom elements support at most 4 subject images total: "
+                    "1 frontal image plus 1-3 additional reference images."
+                )
+
+        if element_type == "image_subject":
+            element_image_list_payload = {
+                "frontal_image": merged_image_list[0],
+                "refer_images": [{"image_url": image_b64} for image_b64 in merged_image_list[1:]],
+            }
+            generator.image = merged_image_list[0]
             generator.image_list = merged_image_list
             generator.imageList = merged_image_list
+            generator.element_image_list = element_image_list_payload
+            generator.elementImageList = json.dumps(element_image_list_payload, ensure_ascii=False)
+            generator.frontal_image = merged_image_list[0]
+            generator.refer_images = merged_image_list[1:]
+        elif element_type == "multi_image_subject":
+            element_image_list_payload = {
+                "frontal_image": merged_image_list[0],
+                "refer_images": [{"image_url": image_b64} for image_b64 in merged_image_list[1:]],
+            }
+            generator.image = merged_image_list[0]
+            generator.image_list = merged_image_list
+            generator.imageList = merged_image_list
+            generator.element_image_list = element_image_list_payload
+            generator.elementImageList = json.dumps(element_image_list_payload, ensure_ascii=False)
+            generator.frontal_image = merged_image_list[0]
+            generator.refer_images = merged_image_list[1:]
         elif element_type == "video_character":
             if not video_url.strip():
                 raise ValueError("video_character requires video_url.")
+            element_video_list_payload = {
+                "refer_videos": [{"video_url": video_url.strip()}],
+            }
             generator.video_url = video_url.strip()
             generator.videoUrl = video_url.strip()
+            generator.element_video_list = [video_url.strip()]
+            generator.elementVideoList = json.dumps(element_video_list_payload, ensure_ascii=False)
 
         if element_voice_id.strip():
             generator.element_voice_id = element_voice_id.strip()
             generator.elementVoiceId = element_voice_id.strip()
+            generator.voice_id = element_voice_id.strip()
 
         extra_payload = _parse_json_input(extra_payload_json, "extra_payload_json")
         if extra_payload:
@@ -1583,7 +1620,8 @@ class AdvancedCustomElementCreateNode:
 
         if not element_description:
             element_description = str(
-                getattr(generator, "element_description", "")
+                getattr(generator, "description", "")
+                or getattr(generator, "element_description", "")
                 or getattr(generator, "elementDescription", "")
                 or ""
             ).strip()
@@ -1593,9 +1631,9 @@ class AdvancedCustomElementCreateNode:
 
         if not element_name:
             element_name = str(
-                getattr(generator, "element_name", "")
+                getattr(generator, "name", "")
+                or getattr(generator, "element_name", "")
                 or getattr(generator, "elementName", "")
-                or getattr(generator, "name", "")
                 or ""
             ).strip()
 
@@ -1605,6 +1643,7 @@ class AdvancedCustomElementCreateNode:
         generator.name = element_name
         generator.element_name = element_name
         generator.elementName = element_name
+        generator.description = element_description
         generator.element_description = element_description
         generator.elementDescription = element_description
 
