@@ -1536,6 +1536,7 @@ class AdvancedCustomElementCreateNode:
     ):
         generator = AdvancedCustomElements()
         generator.type = element_type
+        element_description = (element_description or "").strip()
 
         if element_name.strip():
             generator.name = element_name.strip()
@@ -1570,8 +1571,17 @@ class AdvancedCustomElementCreateNode:
             for key, value in extra_payload.items():
                 setattr(generator, key, value)
 
-        if element_description.strip():
-            generator.elementDescription = element_description.strip()
+        if not element_description:
+            element_description = str(
+                getattr(generator, "element_description", "")
+                or getattr(generator, "elementDescription", "")
+                or ""
+            ).strip()
+
+        if not element_description:
+            raise ValueError("element_description is required for advanced element creation.")
+
+        generator.element_description = element_description
 
         response = generator.run(client)
         _log_final_unit_deduction(response, "advanced_custom_element_create")
