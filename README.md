@@ -1,166 +1,154 @@
 # Comfyui-Kling-Wrapper
 
-This is a custom node pack for ComfyUI that lets you call the Kling AI API directly inside ComfyUI.
+Comfyui-Kling-Wrapper is a ComfyUI custom node pack for calling the Kling AI API directly inside ComfyUI.
 
-The node pack has been upgraded for the new Kling API system and current 3.0-era models, including:
+It bundles image generation, text-to-video, image-to-video, multi-image video, advanced custom elements, motion control, lip sync, text/video to audio, effects, virtual try-on, image expansion, and local preview helpers under the `Comfyui-Kling-Wrapper` category.
 
-- Image generation: `kling-image-o1`, `kling-v3`, `kling-v3-omni`
-- Video generation: `kling-v2-5-turbo`, `kling-v2-6`, `kling-video-o1`, `kling-v3`, `kling-v3-omni`
-- New-system features: intelligent shot mode, reference video, element binding, motion control, and advanced custom elements
+## Highlights
 
-Official references:
+- Direct Kling API access from ComfyUI workflows
+- New-system features such as `element_list`, advanced custom elements, reference video, and motion control
+- Built-in `voice_preset` dropdown for models that support native audio generation
+- Importable example workflows in [examples/README.md](./examples/README.md)
 
-- [Kling AI NEW API Specification](https://docs.qingque.cn/d/home/eZQDkhg4h2Qg8SEVSUTBdzYeY?identityId=2Cn18n4EIHT)
-- [Kling AI Series 3.0 Model API Specification](https://docs.qingque.cn/d/home/eZQDkLsWj1-DlmBV0EQIOm9vu?identityId=2CFp2MveJ7c)
-- [Kling Omni Model API Specification](https://docs.qingque.cn/d/home/eZQCRUy_LWt70n5Wz2sTiLV6J?identityId=1oEFzU43FYK)
-- [Kling V2.6 Model API Specification](https://docs.qingque.cn/d/home/eZQB6Bbl5WgW8eIVN--duPVl1?identityId=1oEFzU43FYK)
+## Current model visibility
 
+The plugin keeps the visible model dropdowns aligned with models verified on the active endpoint.
+
+Visible image generation models:
+
+- `kling-v1`
+- `kling-v1-5`
+- `kling-v2`
+- `kling-v2-new`
+- `kling-v2-1`
+- `kling-v3`
+
+Visible text-to-video models:
+
+- `kling-v1`
+- `kling-v1-6`
+- `kling-v2-master`
+- `kling-v2-1-master`
+- `kling-v2-5-turbo`
+- `kling-v2-6`
+- `kling-v3`
+
+Visible image-to-video models:
+
+- `kling-v1`
+- `kling-v1-5`
+- `kling-v1-6`
+- `kling-v2-master`
+- `kling-v2-1`
+- `kling-v2-1-master`
+- `kling-v2-5-turbo`
+- `kling-v2-6`
+- `kling-v3`
+
+Visible multi-image video models:
+
+- `kling-v2-1`
+- `kling-v2-5-turbo`
+- `kling-v3`
+
+Documented newer models such as `kling-image-o1`, `kling-video-o1`, and `kling-v3-omni` still exist in the internal capability map, but are hidden from the UI until live endpoint support is confirmed for normal accounts.
+
+## Important limitations
+
+- Native `sound` and `voice_preset` support is currently only verified for `kling-v2-6` on the active endpoint.
+- `kling-v3`, `kling-v3-omni`, and `kling-video-o1` may appear in official docs, but the current public endpoint does not expose native sound control for them through this plugin.
+- `Advanced Element Create` requires 1 frontal subject image plus 1-3 additional reference images of the same subject. Background images do not count as reference images.
+- `Advanced Element Create` also enforces `element_name <= 20` characters and `element_description <= 100` characters.
+- If you need both strong subject consistency and voiced output, the reliable flow on the current endpoint is usually: generate the bound subject video first, then add speech with `Lip Sync`, `TextToAudio`, or `Video2Audio`.
 
 ## Requirements
-Before using this node, you need to have [a KLing AI API key](https://docs.qingque.cn/d/home/eZQA6m4cRjTB1BBiE5eJ4lyvL?identityId=1oEER8VjdS8). 
+
+Before using these nodes, you need a Kling API key:
+
+- [Kling API key documentation](https://docs.qingque.cn/d/home/eZQA6m4cRjTB1BBiE5eJ4lyvL?identityId=1oEER8VjdS8)
+
+Python dependencies are listed in [requirements.txt](./requirements.txt).
 
 ## Installation
 
-### Installing manually
+### Manual installation
 
-1. Navigate to the `ComfyUI/custom_nodes` directory.
+1. Open your `ComfyUI/custom_nodes` directory.
+2. Clone this repository:
 
-2. Clone this repository: `git clone https://github.com/KwaiVGI/ComfyUI-KLingAI-API`
-  
-3. Install the dependencies:
-  - Windows (ComfyUI portable): `python -m pip install -r ComfyUI\custom_nodes\ComfyUI-KLingAI-API\requirements.txt`
-  - Linux or MacOS: `cd ComfyUI-KLingAI-API && pip install -r requirements.txt`
+   ```bash
+   git clone https://github.com/magicwang1111/Comfyui-Kling-Wrapper.git
+   ```
 
-4. If you don't want to expose your key, you can add it into the `config.ini` file and keep it empty in the node.
+3. Install dependencies:
 
-5. Start ComfyUI and search for nodes prefixed with `Comfyui-Kling-Wrapper`.
+   Windows (portable ComfyUI):
 
-## Naming
+   ```bash
+   python -m pip install -r ComfyUI\custom_nodes\Comfyui-Kling-Wrapper\requirements.txt
+   ```
 
-All exported node names now use the `Comfyui-Kling-Wrapper` prefix and the category `Comfyui-Kling-Wrapper`.
+   Linux or macOS:
 
-## Nodes
+   ```bash
+   cd Comfyui-Kling-Wrapper
+   pip install -r requirements.txt
+   ```
 
-Workflow JSON examples now live in [examples/README.md](./examples/README.md). The old screenshot-based examples have been replaced with importable ComfyUI workflows and updated Python API snippets.
+4. Either:
 
-### Client
+   - fill `access_key` and `secret_key` directly in the `Comfyui-Kling-Wrapper Client` node, or
+   - store them in [config.ini](./config.ini) and leave the node fields empty
 
-This node is used to create a KLing AI client.
+5. Restart ComfyUI and search for nodes prefixed with `Comfyui-Kling-Wrapper`.
 
-### Image Generator
+## Node list
 
-This node is used to generate an image given a text prompt.
+- `Comfyui-Kling-Wrapper Client`
+- `Comfyui-Kling-Wrapper Image Generator`
+- `Comfyui-Kling-Wrapper Image Expander`
+- `Comfyui-Kling-Wrapper Text2Video`
+- `Comfyui-Kling-Wrapper Image2Video`
+- `Comfyui-Kling-Wrapper Multi Images To Video`
+- `Comfyui-Kling-Wrapper Virtual Try On`
+- `Comfyui-Kling-Wrapper Video Extender`
+- `Comfyui-Kling-Wrapper Lip Sync`
+- `Comfyui-Kling-Wrapper Lip Sync Text Input`
+- `Comfyui-Kling-Wrapper Lip Sync Audio Input`
+- `Comfyui-Kling-Wrapper Effects`
+- `Comfyui-Kling-Wrapper TextToAudio`
+- `Comfyui-Kling-Wrapper Video2Audio`
+- `Comfyui-Kling-Wrapper Advanced Element Create`
+- `Comfyui-Kling-Wrapper Advanced Element Query`
+- `Comfyui-Kling-Wrapper Element List Builder`
+- `Comfyui-Kling-Wrapper Motion Control`
+- `Comfyui-Kling-Wrapper Preview Video`
+- `Comfyui-Kling-Wrapper Preview Audio`
 
-### Text2Video
+## Voice presets
 
-This node is used to generate a video given a text prompt.
+`Text2Video` and `Image2Video` expose a `voice_preset` dropdown instead of requiring manual `voice_list` JSON.
 
-### Image2Video
-
-This node is used to generate a video given an image.
-
-### Multi Images To Video
-
-This node is used to create a video from a batch of reference images.
-
-### Kolors Virtual Try-On
-
-This node is used to display the try-on effect.
-
-### Video Extend
-This node is used to extend a video.
-
-### Lip Sync
-This node is used to generate a lip sync video.
-
-### Effects
-You can achieve different special effects based on the effect_scene.
-
-### ImageExpander
-
-This node is used to expand a image.
-
-###  Video2AudioNode
-
-This node is used to generate a audio from video.
-
-###  TextToAudioNode
-
-This node is used to generate a audio from text.
-
-### Advanced Element Create
-
-Creates an advanced custom element with the new asynchronous `advanced-custom-elements` API.
-
-### Advanced Element Query
-
-Fetches an advanced custom element by task ID or element ID.
-
-### Element List Builder
-
-Builds an `element_list` payload that can be fed into the latest video-generation nodes.
-
-### Motion Control
-
-Creates motion-control videos with the new-system motion control API.
-
-## Voice Presets
-
-`Comfyui-Kling-Wrapper Text2Video` and `Comfyui-Kling-Wrapper Image2Video` now expose a `voice_preset` dropdown instead of requiring manual `voice_list` JSON input. The node sends the selected preset as:
+The selected preset is converted to:
 
 ```json
 [{"voice_id":"..."}]
 ```
 
-These built-in presets are intended for models that support `voice_list` on the active endpoint, and are especially useful with `kling-v2-6`:
+These presets are mainly intended for models that support native audio generation on the active endpoint, especially `kling-v2-6`.
 
-- `Sunny`: `genshin_vindi2`
-- `Sage`: `zhinen_xuesheng`
-- `运动少年`: `tiyuxi_xuedi`
-- `Blossom`: `ai_shatang`
-- `Peppy`: `genshin_klee2`
-- `元气少女`: `guanxiaofang-v2`
-- `Shine`: `ai_kaiya`
-- `幽默小哥`: `tiexin_nanyou`
-- `Lyric`: `ai_chenjiahao_712`
-- `甜美邻家`: `girlfriend_1_speech02`
-- `Tender`: `chat1_female_new-3`
-- `职场女青`: `girlfriend_2_speech02`
-- `Zippy`: `cartoon-boy-07`
-- `Sprite`: `cartoon-girl-01`
-- `Rock`: `ai_huangyaoshi_712`
-- `Helen`: `you_pingjing`
-- `Titan`: `ai_laoguowang_712`
-- `Grace`: `chengshu_jiejie`
-- `慈祥爷爷`: `zhuxi_speech02`
-- `唠叨爷爷`: `uk_oldman3`
-- `Prattle`: `laopopo_speech02`
-- `Hearth`: `heainainai_speech02`
-- `东北老铁`: `dongbeilaotie_speech02`
-- `重庆小伙`: `chongqingxiaohuo_speech02`
-- `四川妹子`: `chuanmeizi_speech02`
-- `潮汕大叔`: `chaoshandashu_speech02`
-- `台湾男生`: `ai_taiwan_man2_speech02`
-- `西安掌柜`: `xianzhanggui_speech02`
-- `天津姐姐`: `tianjinjiejie_speech02`
-- `新闻播报男`: `diyinnansang_DB_CN_M_04-v2`
-- `译制片男`: `yizhipiannan-v1`
-- `撒娇女友`: `tianmeixuemei-v1`
-- `刀片烟嗓`: `daopianyansang-v1`
-- `乖巧正太`: `mengwa-v1`
-- `Ace`: `AOT`
-- `Dove`: `genshin_kirara`
-- `Anchor`: `oversea_male1`
-- `Melody`: `girlfriend_4_speech02`
-- `Siren`: `chat_0407_5-1`
-- `Bud`: `uk_boy1`
-- `Candy`: `PeppaPig_platform`
-- `Beacon`: `ai_huangzhong_712`
-- `Lore`: `calm_story1`
-- `Crag`: `uk_man2`
-- `The Reader`: `reader_en_m-v1`
-- `Commercial Lady`: `commercial_lady_en_f-v1`
+## Examples
 
-## Pricing
+Example workflows and small Python snippets live in [examples/README.md](./examples/README.md).
 
-For pricing, follow [KLing AI Pricing](https://klingai.com/api/pricing). The nodes also log `final_unit_deduction` from API responses when the API returns it.
+## Official references
+
+- [Kling new-system API documentation](https://docs.qingque.cn/d/home/eZQAyImcbaS0fz-8ANjXvU5ed?identityId=2E1MlYrrPk4)
+- [Kling 3.0 series capability map](https://docs.qingque.cn/d/home/eZQCedMeoI1MTquS1SFRihz4S?identityId=1oEFzU43FYK)
+- [Kling V2.6 API documentation](https://docs.qingque.cn/d/home/eZQB6Bbl5WgW8eIVN--duPVl1?identityId=1oEFzU43FYK)
+- [Kling pricing](https://klingai.com/api/pricing)
+
+## Notes
+
+The nodes log `final_unit_deduction` when the API returns billing information. This is useful when checking the real unit cost of newer Kling endpoints and workflows.
