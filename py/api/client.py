@@ -19,7 +19,7 @@ class Client:
     __token = None
     __client = None
 
-    def __init__(self, access_key, secret_key, in_china=True, timeout=5, poll_interval=1.0, ttl=1800):
+    def __init__(self, access_key, secret_key, in_china=True, timeout=30, poll_interval=1.0, ttl=1800):
         super().__init__()
         self._access_key = access_key
         self._secret_key = secret_key
@@ -31,7 +31,19 @@ class Client:
         self.poll_interval = poll_interval
 
     def request(self, method: str, path: str, **kwargs) -> dict:
-        resp = self._client.request(method, path, **kwargs)
+        if "json" in kwargs:
+            import json as _json
+            _preview = {k: (v[:60] + "...[truncated]" if isinstance(v, str) and len(v) > 60 else v) for k, v in kwargs["json"].items()}
+            print(f"[KLING DEBUG] {method} {path} payload keys={list(kwargs['json'].keys())}")
+            print(f"[KLING DEBUG] payload preview: {_json.dumps(_preview, default=str)[:500]}")
+        try:
+            resp = self._client.request(method, path, **kwargs)
+        except httpx.TimeoutException as exc:
+            raise TimeoutError(
+                f"Kling API request timed out after {self._timeout}s while waiting for {method} {path}. "
+                "Try increasing the client request_timeout, especially for advanced element creation "
+                "with multiple reference images."
+            ) from exc
         _raise_for_status(resp)
         return resp.json()
 
@@ -65,6 +77,6 @@ class Client:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._token}"
             }
-            timeout = httpx.Timeout(self._timeout)
+            timeout = httpx.Timeout(connect=10.0, read=self._timeout, write=self._timeout, pool=self._timeout)
             self.__client = httpx.Client(base_url=base_url, headers=headers, timeout=timeout)
         return self.__client
