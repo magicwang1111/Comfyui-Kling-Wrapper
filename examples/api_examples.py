@@ -47,12 +47,15 @@ def example_text2video_v26_sound(client: Client):
     return task.run(client)
 
 
-def example_create_advanced_element(client: Client, image_path: str):
+def example_create_advanced_element(client: Client, frontal_image_path: str, reference_image_paths: list[str]):
+    if not 1 <= len(reference_image_paths) <= 3:
+        raise ValueError("Provide 1-3 additional reference images of the same subject.")
     task = AdvancedCustomElements()
-    task.type = "image_subject"
     task.name = "demo_subject"
-    task.image = image_to_base64(image_path)
-    task.image_list = [task.image]
+    task.description = "A clear portrait of the subject with consistent identity traits for reuse in video generation."
+    task.reference_type = "image_refer"
+    task.frontal_image = image_to_base64(frontal_image_path)
+    task.refer_images = [image_to_base64(path) for path in reference_image_paths]
     return task.run(client)
 
 

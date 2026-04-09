@@ -69,7 +69,7 @@ def client_node(node_id=1, order=0, area="china"):
         [40, 60],
         [320, 210],
         order,
-        ["", "", 1, area],
+        ["", "", 1, 30, area],
         outputs=[output_slot("client", CLIENT_TYPE, slot_index=0)],
     )
 
@@ -424,7 +424,7 @@ def advanced_element_create_node(node_id, pos, order):
         node_id,
         type_name,
         pos,
-        [390, 260],
+        [390, 278],
         order,
         [
             "image_subject",
@@ -459,7 +459,7 @@ def element_list_builder_node(node_id, pos, order):
         inputs=[input_slot("element_1", ELEMENT_TYPE)],
         outputs=[
             output_slot("element_list", ELEMENT_LIST_TYPE, slot_index=0),
-            output_slot("element_json", "STRING", slot_index=1),
+            output_slot("element_list_json", "STRING", slot_index=1),
         ],
     )
 
@@ -508,7 +508,7 @@ This directory contains refreshed ComfyUI workflow JSON examples for the upgrade
 Before running the workflows:
 
 - Fill in `access_key` and `secret_key` in the `Comfyui-Kling-Wrapper Client` node, or keep them empty and use `config.ini`.
-- Replace placeholder image filenames such as `example_portrait.png`, `example_subject_a.png`, `example_cloth.png`, and `example_scene.png` with files that exist in your ComfyUI input directory.
+- Replace placeholder image filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, and `example_scene.png` with files that exist in your ComfyUI input directory.
 - Replace placeholder URLs such as `https://example.com/reference-motion.mp4` with real URLs when needed.
 - If `kling-v3-omni`, `kling-video-o1`, or `kling-image-o1` return `1201 model is not supported`, verify the model is enabled for your key on the active endpoint. The official docs list newer models, but the live service can lag behind rollout on some accounts.
 
@@ -519,7 +519,7 @@ Included files:
 - `03_comfyui_kling_wrapper_image2video_v3.json`: single-image to video with the 3.0 video family.
 - `04_comfyui_kling_wrapper_multi_images_to_video_v3.json`: multi-image identity-consistent video generation.
 - `05_comfyui_kling_wrapper_text2video_v26_sound.json`: `kling-v2-6` talking-head example using the node's built-in `voice_preset` dropdown.
-- `06_comfyui_kling_wrapper_advanced_element_subject_to_image2video.json`: create an advanced element and bind it into image-to-video.
+- `06_comfyui_kling_wrapper_advanced_element_subject_to_image2video.json`: create an advanced element from 1 frontal photo plus 2 subject reference photos, then bind it into image-to-video.
 - `07_comfyui_kling_wrapper_motion_control_v26.json`: motion-control workflow with reference image and reference video.
 - `08_comfyui_kling_wrapper_virtual_try_on.json`: virtual try-on image workflow.
 - `09_comfyui_kling_wrapper_image_expand.json`: image expansion workflow.
@@ -583,12 +583,15 @@ def example_text2video_v26_sound(client: Client):
     return task.run(client)
 
 
-def example_create_advanced_element(client: Client, image_path: str):
+def example_create_advanced_element(client: Client, frontal_image_path: str, reference_image_paths: list[str]):
+    if not 1 <= len(reference_image_paths) <= 3:
+        raise ValueError("Provide 1-3 additional reference images of the same subject.")
     task = AdvancedCustomElements()
-    task.type = "image_subject"
     task.name = "demo_subject"
-    task.image = image_to_base64(image_path)
-    task.image_list = [task.image]
+    task.description = "A clear portrait of the subject with consistent identity traits for reuse in video generation."
+    task.reference_type = "image_refer"
+    task.frontal_image = image_to_base64(frontal_image_path)
+    task.refer_images = [image_to_base64(path) for path in reference_image_paths]
     return task.run(client)
 
 
@@ -742,36 +745,43 @@ def generate_workflows():
 
     nodes = [
         client_node(1, 0),
-        load_image_node(2, "example_subject.png", [30, 140], 1),
-        load_image_node(3, "example_scene.png", [30, 520], 2),
-        advanced_element_create_node(4, [390, 100], 3),
-        element_list_builder_node(5, [820, 120], 4),
+        load_image_node(2, "example_subject_front.png", [30, 100], 1),
+        load_image_node(3, "example_subject_ref_1.png", [30, 470], 2),
+        load_image_node(4, "example_subject_ref_2.png", [30, 840], 3),
+        image_batch_node(5, [360, 640], 4),
+        load_image_node(6, "example_scene.png", [360, 980], 5),
+        advanced_element_create_node(7, [720, 180], 6),
+        element_list_builder_node(8, [1160, 180], 7),
         image2video_node(
-            6,
-            [820, 420],
-            5,
+            9,
+            [1160, 500],
+            8,
             "kling-v3",
             "Keep the same subject identity while the camera slowly moves and the background remains coherent.",
             mode="pro",
         ),
-        preview_video_node(7, [1290, 420], 6, 7),
+        preview_video_node(10, [1640, 500], 9, 10),
     ]
     links = [
-        link(1, 1, 0, 4, 0, CLIENT_TYPE),
-        link(2, 2, 0, 4, 1, "IMAGE"),
-        link(3, 4, 0, 5, 0, ELEMENT_TYPE),
-        link(4, 1, 0, 6, 0, CLIENT_TYPE),
-        link(5, 3, 0, 6, 1, "IMAGE"),
-        link(6, 5, 0, 6, 4, ELEMENT_LIST_TYPE),
-        link(7, 6, 0, 7, 0, "STRING"),
+        link(1, 1, 0, 7, 0, CLIENT_TYPE),
+        link(2, 2, 0, 7, 1, "IMAGE"),
+        link(3, 3, 0, 5, 0, "IMAGE"),
+        link(4, 4, 0, 5, 1, "IMAGE"),
+        link(5, 5, 0, 7, 2, "IMAGE"),
+        link(6, 7, 0, 8, 0, ELEMENT_TYPE),
+        link(7, 1, 0, 9, 0, CLIENT_TYPE),
+        link(8, 6, 0, 9, 1, "IMAGE"),
+        link(9, 8, 0, 9, 4, ELEMENT_LIST_TYPE),
+        link(10, 9, 0, 10, 0, "STRING"),
     ]
-    nodes[3]["inputs"][0]["link"] = 1
-    nodes[3]["inputs"][1]["link"] = 2
-    nodes[4]["inputs"][0]["link"] = 3
-    nodes[5]["inputs"][0]["link"] = 4
-    nodes[5]["inputs"][1]["link"] = 5
-    nodes[5]["inputs"].append(input_slot("element_list", ELEMENT_LIST_TYPE, 6))
-    nodes[5]["outputs"][0]["links"] = [7]
+    nodes[6]["inputs"][0]["link"] = 1
+    nodes[6]["inputs"][1]["link"] = 2
+    nodes[6]["inputs"][2]["link"] = 5
+    nodes[7]["inputs"][0]["link"] = 6
+    nodes[8]["inputs"][0]["link"] = 7
+    nodes[8]["inputs"][1]["link"] = 8
+    nodes[8]["inputs"].append(input_slot("element_list", ELEMENT_LIST_TYPE, 9))
+    nodes[8]["outputs"][0]["links"] = [10]
     examples["06_comfyui_kling_wrapper_advanced_element_subject_to_image2video.json"] = workflow(nodes, links)
 
     nodes = [
