@@ -1628,6 +1628,11 @@ class AdvancedCustomElementCreateNode:
 
         if not element_description:
             raise ValueError("element_description is required for advanced element creation.")
+        if len(element_description) > 100:
+            raise ValueError(
+                "element_description must be 100 characters or fewer for advanced element creation. "
+                "This describes the reusable subject itself and is unrelated to the Image2Video voice mode."
+            )
 
         if not element_name:
             element_name = str(
@@ -1639,6 +1644,8 @@ class AdvancedCustomElementCreateNode:
 
         if not element_name:
             raise ValueError("element_name is required for advanced element creation.")
+        if len(element_name) > 20:
+            raise ValueError("element_name must be 20 characters or fewer for advanced element creation.")
 
         generator.name = element_name
         generator.element_name = element_name

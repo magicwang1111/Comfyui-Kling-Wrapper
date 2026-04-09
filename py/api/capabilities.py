@@ -256,8 +256,10 @@ VIDEO_MODEL_CAPABILITIES = {
     },
 }
 
-# ComfyUI input options are static, so we align the visible dropdowns to the
-# Beijing endpoint probe results collected on 2026-04-09.
+# ComfyUI input options are static, so we keep the visible dropdowns aligned
+# with models verified on the active endpoint. Newer documented models may
+# still exist in VIDEO_MODEL_CAPABILITIES for future use, but remain hidden
+# until live account support is confirmed.
 IMAGE_GENERATION_MODELS = [
     "kling-v1",
     "kling-v1-5",
@@ -289,8 +291,8 @@ IMAGE_TO_VIDEO_MODELS = [
     "kling-v3",
 ]
 
-# Beijing multi-image generation currently succeeds by routing through
-# image2video with a primary `image` plus supplemental `image_list`.
+# Multi-image generation is routed through image2video with a primary `image`
+# plus supplemental `image_list`.
 MULTI_IMAGE_TO_VIDEO_MODELS = [
     "kling-v2-1",
     "kling-v2-5-turbo",
