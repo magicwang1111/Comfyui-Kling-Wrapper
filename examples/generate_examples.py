@@ -426,7 +426,14 @@ def advanced_element_create_node(node_id, pos, order):
         pos,
         [390, 260],
         order,
-        ["image_subject", "demo_subject", "", "", ""],
+        [
+            "image_subject",
+            "demo_subject",
+            "A clear portrait of the subject with consistent identity traits for reuse in video generation.",
+            "",
+            "",
+            "",
+        ],
         inputs=[
             input_slot("client", CLIENT_TYPE),
             input_slot("image", "IMAGE"),

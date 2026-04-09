@@ -1505,6 +1505,7 @@ class AdvancedCustomElementCreateNode:
                 "client": (CLIENT_TYPE,),
                 "element_type": (["image_subject", "multi_image_subject", "video_character"],),
                 "element_name": ("STRING", {"multiline": False, "default": ""}),
+                "element_description": ("STRING", {"multiline": True, "default": ""}),
             },
             "optional": {
                 "image": ("IMAGE",),
@@ -1526,6 +1527,7 @@ class AdvancedCustomElementCreateNode:
             client,
             element_type,
             element_name="",
+            element_description="",
             image=None,
             image_list=None,
             video_url="",
@@ -1567,6 +1569,9 @@ class AdvancedCustomElementCreateNode:
                 raise ValueError("extra_payload_json must decode to a JSON object.")
             for key, value in extra_payload.items():
                 setattr(generator, key, value)
+
+        if element_description.strip():
+            generator.elementDescription = element_description.strip()
 
         response = generator.run(client)
         _log_final_unit_deduction(response, "advanced_custom_element_create")
