@@ -20,7 +20,6 @@ from collections.abc import Iterable
 import configparser
 import folder_paths
 from comfy_extras.nodes_audio import LoadAudio
-from folder_paths import get_temp_directory
 import time
 import urllib.parse
 from pathlib import Path
@@ -428,6 +427,14 @@ def _load_audio_from_url(audio_url, save_directory, filename_prefix="audio"):
         raise Exception(f"save failed: {e}")
     except Exception as e:
         raise Exception(f"other failed: {e}")
+
+
+def _saved_result(filename, subfolder, folder_type):
+    return {
+        "filename": filename,
+        "subfolder": subfolder,
+        "type": folder_type,
+    }
 
 
 class KLingAIAPIClient:
@@ -1031,30 +1038,24 @@ class PreviewVideo:
         (
             full_output_folder,
             filename,
-            _,
-            _,
+            counter,
+            subfolder,
             _,
         ) = folder_paths.get_save_image_path(filename_prefix, output_dir)
-
-        max_counter = 0
-
-        matcher = re.compile(f"{re.escape(filename)}_(\\d+)\\D*\\..+", re.IGNORECASE)
-        for existing_file in os.listdir(full_output_folder):
-            match = matcher.fullmatch(existing_file)
-            if match:
-                file_counter = int(match.group(1))
-                if file_counter > max_counter:
-                    max_counter = file_counter
-
-        counter = max_counter + 1
-        file = f"{filename}_{counter:05}.mp4"
+        file = f"{filename}_{counter:05}_.mp4"
         file_path = os.path.join(full_output_folder, file)
 
         if type(video_url) == list:
             video_url = video_url[0]
         open(file_path, "wb").write(_fetch_image(video_url))
 
-        return {"ui": {"video_url": [video_url]}, "result": (file_path,)}
+        return {
+            "ui": {
+                "images": [_saved_result(file, subfolder, "output")],
+                "animated": (True,),
+            },
+            "result": (file_path,),
+        }
 
 
 class PreviewAudio(LoadAudio):
@@ -1095,12 +1096,19 @@ class PreviewAudio(LoadAudio):
                     "result": (None, '')
                 }
 
-            temp_directory = get_temp_directory()
+            output_directory = folder_paths.get_output_directory()
+            (
+                full_output_folder,
+                filename,
+                counter,
+                subfolder,
+                _,
+            ) = folder_paths.get_save_image_path(filename_prefix, output_directory)
 
             saved_file_path = _load_audio_from_url(
                 audio_url=audio_url,
-                save_directory=temp_directory,
-                filename_prefix=filename_prefix
+                save_directory=full_output_folder,
+                filename_prefix=f"{filename}_{counter:05}"
             )
 
             audio_result = super().load(saved_file_path)
@@ -1109,8 +1117,7 @@ class PreviewAudio(LoadAudio):
 
             return {
                 "ui": {
-                    "audio_url": [audio_url],
-                    "file_path": [saved_file_path]
+                    "audio": [_saved_result(Path(saved_file_path).name, subfolder, "output")]
                 },
                 "result": (audio_data, saved_file_path)
             }
