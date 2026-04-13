@@ -1,0 +1,7 @@
+{
+  "access_key": "",
+  "secret_key": "",
+  "poll_interval": 1.0,
+  "request_timeout": 30,
+  "area": "china"
+}

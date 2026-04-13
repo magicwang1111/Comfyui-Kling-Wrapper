@@ -80,3 +80,8 @@ class Client:
             timeout = httpx.Timeout(connect=10.0, read=self._timeout, write=self._timeout, pool=self._timeout)
             self.__client = httpx.Client(base_url=base_url, headers=headers, timeout=timeout)
         return self.__client
+
+    def close(self) -> None:
+        if self.__client is not None:
+            self.__client.close()
+            self.__client = None

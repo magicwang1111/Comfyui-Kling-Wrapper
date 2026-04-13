@@ -1,13 +1,15 @@
 from .api import Client, ImageGenerator, ImageExpander, Image2Video, Video2Audio, Text2Audio, \
     Text2Video, CameraControl, CameraControlConfig, KolorsVurtualTryOn, VideoExtend, LipSync, LipSyncInput, EffectInput, \
     Effects, MultiImages2Video, MultiModelVideoEdit, AdvancedCustomElements, MotionControl
-from .api.capabilities import CLIENT_TYPE, DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, DEFAULT_VIDEO_ASPECT_RATIOS, \
+from .api.capabilities import DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, DEFAULT_VIDEO_ASPECT_RATIOS, \
     DEFAULT_VIDEO_DURATIONS, ELEMENT_LIST_TYPE, ELEMENT_TYPE, EXTENDED_IMAGE_ASPECT_RATIOS, IMAGE_GENERATION_MODELS, \
     IMAGE_TO_VIDEO_MODELS, LIPSYNC_INPUT_TYPE, MULTI_IMAGE_TO_VIDEO_MODELS, NODE_CATEGORY, NODE_PREFIX, SHOT_TYPES, \
     SOUND_OPTIONS, TEXT_TO_VIDEO_MODELS, get_image_capability, get_video_capability, \
     validate_image_generation_request, validate_video_generation_request
 from .api.exceptions import KLingAPIError
 import base64
+import configparser
+from contextlib import contextmanager
 import io
 import json
 import os
@@ -17,20 +19,20 @@ import PIL
 import requests
 import torch
 from collections.abc import Iterable
-import configparser
 import folder_paths
 from comfy_extras.nodes_audio import LoadAudio
 import time
 import urllib.parse
 from pathlib import Path
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-config_path = os.path.join(parent_dir, 'config.ini')
-config = configparser.ConfigParser()
-config.read(config_path)
+ROOT_DIR = Path(__file__).resolve().parents[1]
+CONFIG_JSON_PATH = ROOT_DIR / "config.local.json"
+LEGACY_CONFIG_PATH = ROOT_DIR / "config.ini"
+LEGACY_CONFIG_SECTION = "API"
 
 DEFAULT_FILENAME_PREFIX = NODE_PREFIX
+DEFAULT_REQUEST_TIMEOUT = 30
+DEFAULT_POLL_INTERVAL = 1.0
 DEFAULT_AREA_OPTIONS = ["global", "china"]
 CAMERA_CONTROL_TYPES = ["None", "simple", "down_back", "forward_up", "right_turn_forward", "left_turn_forward"]
 CAMERA_CONTROL_CONFIGS = ["horizontal", "vertical", "pan", "tilt", "roll", "zoom"]
@@ -115,6 +117,206 @@ VOICE_PRESET_ITEMS = _build_voice_preset_items()
 VOICE_PRESET_OPTIONS = [label for label, _ in VOICE_PRESET_ITEMS]
 VOICE_PRESET_VALUE_BY_LABEL = {label: voice_id for label, voice_id in VOICE_PRESET_ITEMS}
 DEFAULT_VOICE_PRESET = "None"
+
+
+def _load_json_config():
+    if not CONFIG_JSON_PATH.exists():
+        return {}
+
+    try:
+        with CONFIG_JSON_PATH.open("r", encoding="utf-8") as handle:
+            config_data = json.load(handle)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{CONFIG_JSON_PATH.name} is not valid JSON: {exc}") from exc
+    except OSError as exc:
+        raise ValueError(f"Failed to read {CONFIG_JSON_PATH.name}: {exc}") from exc
+
+    if not isinstance(config_data, dict):
+        raise ValueError(f"{CONFIG_JSON_PATH.name} must contain a top-level JSON object.")
+
+    return config_data
+
+
+def _json_value_present(config_data, key):
+    if key not in config_data:
+        return False
+
+    value = config_data[key]
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
+def _load_env_value(*keys):
+    for key in keys:
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _load_legacy_config_value(*keys):
+    config = configparser.ConfigParser()
+    config.read(LEGACY_CONFIG_PATH, encoding="utf-8")
+    for key in keys:
+        value = config.get(LEGACY_CONFIG_SECTION, key, fallback="").strip()
+        if value:
+            return value
+    return ""
+
+
+def _parse_request_timeout(value):
+    if isinstance(value, bool):
+        raise ValueError("request_timeout must be an integer.")
+
+    if isinstance(value, int):
+        timeout = value
+    else:
+        try:
+            timeout = int(str(value).strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("request_timeout must be an integer.") from exc
+
+    if timeout < 5:
+        raise ValueError("request_timeout must be greater than or equal to 5.")
+
+    return timeout
+
+
+def _parse_poll_interval(value):
+    if isinstance(value, bool):
+        raise ValueError("poll_interval must be a number.")
+
+    if isinstance(value, (int, float)):
+        interval = float(value)
+    else:
+        try:
+            interval = float(str(value).strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("poll_interval must be a number.") from exc
+
+    if interval <= 0:
+        raise ValueError("poll_interval must be greater than 0.")
+
+    return interval
+
+
+def _normalize_area(value):
+    normalized = str(value).strip().lower()
+    aliases = {
+        "global": "global",
+        "intl": "global",
+        "international": "global",
+        "china": "china",
+        "cn": "china",
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+    raise ValueError(f"area must be one of: {', '.join(DEFAULT_AREA_OPTIONS)}.")
+
+
+def _resolve_access_key(config_data):
+    if _json_value_present(config_data, "access_key"):
+        return str(config_data["access_key"]).strip()
+
+    env_value = _load_env_value("KLINGAI_API_ACCESS_KEY", "KLING_ACCESS_KEY")
+    if env_value:
+        return env_value
+
+    legacy_value = _load_legacy_config_value("KLINGAI_API_ACCESS_KEY")
+    if legacy_value:
+        return legacy_value
+
+    raise ValueError(
+        "An access_key is required. Add access_key to config.local.json, set KLINGAI_API_ACCESS_KEY or "
+        "KLING_ACCESS_KEY, or add KLINGAI_API_ACCESS_KEY to config.ini."
+    )
+
+
+def _resolve_secret_key(config_data):
+    if _json_value_present(config_data, "secret_key"):
+        return str(config_data["secret_key"]).strip()
+
+    env_value = _load_env_value("KLINGAI_API_SECRET_KEY", "KLING_SECRET_KEY")
+    if env_value:
+        return env_value
+
+    legacy_value = _load_legacy_config_value("KLINGAI_API_SECRET_KEY")
+    if legacy_value:
+        return legacy_value
+
+    raise ValueError(
+        "A secret_key is required. Add secret_key to config.local.json, set KLINGAI_API_SECRET_KEY or "
+        "KLING_SECRET_KEY, or add KLINGAI_API_SECRET_KEY to config.ini."
+    )
+
+
+def _resolve_area(config_data):
+    if _json_value_present(config_data, "area"):
+        return _normalize_area(config_data["area"])
+
+    env_value = _load_env_value("KLINGAI_AREA")
+    if env_value:
+        return _normalize_area(env_value)
+
+    legacy_value = _load_legacy_config_value("KLINGAI_AREA")
+    if legacy_value:
+        return _normalize_area(legacy_value)
+
+    return DEFAULT_AREA_OPTIONS[0]
+
+
+def _resolve_poll_interval(config_data):
+    if _json_value_present(config_data, "poll_interval"):
+        return _parse_poll_interval(config_data["poll_interval"])
+
+    env_value = _load_env_value("KLINGAI_POLL_INTERVAL")
+    if env_value:
+        return _parse_poll_interval(env_value)
+
+    legacy_value = _load_legacy_config_value("KLINGAI_POLL_INTERVAL")
+    if legacy_value:
+        return _parse_poll_interval(legacy_value)
+
+    return DEFAULT_POLL_INTERVAL
+
+
+def _resolve_request_timeout(config_data):
+    if _json_value_present(config_data, "request_timeout"):
+        return _parse_request_timeout(config_data["request_timeout"])
+
+    env_value = _load_env_value("KLINGAI_REQUEST_TIMEOUT")
+    if env_value:
+        return _parse_request_timeout(env_value)
+
+    legacy_value = _load_legacy_config_value("KLINGAI_REQUEST_TIMEOUT")
+    if legacy_value:
+        return _parse_request_timeout(legacy_value)
+
+    return DEFAULT_REQUEST_TIMEOUT
+
+
+def _create_runtime_client():
+    config_data = _load_json_config()
+    client = Client(
+        _resolve_access_key(config_data),
+        _resolve_secret_key(config_data),
+        in_china=_resolve_area(config_data) == "china",
+        timeout=_resolve_request_timeout(config_data),
+        poll_interval=_resolve_poll_interval(config_data),
+    )
+    return client
+
+
+@contextmanager
+def _runtime_client():
+    client = _create_runtime_client()
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 def _fetch_image(url, stream=True):
@@ -437,62 +639,11 @@ def _saved_result(filename, subfolder, folder_type):
     }
 
 
-class KLingAIAPIClient:
-
-    def __init__(self):
-        pass
-
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "access_key": ("STRING", {"multiline": False, "default": ""}),
-                "secret_key": ("STRING", {"multiline": False, "default": ""}),
-                "poll_interval": ("INT", {"default": "1"}),
-                "request_timeout": ("INT", {"default": 30, "min": 5, "max": 300, "step": 1}),
-                "area": (DEFAULT_AREA_OPTIONS,),
-            },
-        }
-
-    RETURN_TYPES = (CLIENT_TYPE,)
-    RETURN_NAMES = ("client",)
-
-    FUNCTION = "create_client"
-
-    OUTPUT_NODE = True
-
-    CATEGORY = NODE_CATEGORY
-
-    def create_client(self, access_key, secret_key, poll_interval, request_timeout, area):
-
-        in_china = (area == "china")
-
-        if access_key == "" or secret_key == "":
-            try:
-                klingai_api_access_key = config['API']['KLINGAI_API_ACCESS_KEY']
-                klingai_api_scerct_key = config['API']['KLINGAI_API_SECRET_KEY']
-                if klingai_api_access_key == '':
-                    raise ValueError('ACCESS_KEY is empty')
-                if klingai_api_scerct_key == '':
-                    raise ValueError('SECRET_KEY is empty')
-
-            except KeyError:
-                raise ValueError('unable to find ACCESS_KEY or SECRET_KEY in config.ini')
-
-            client = Client(klingai_api_access_key, klingai_api_scerct_key, in_china, timeout=request_timeout)
-        else:
-            client = Client(access_key, secret_key, in_china, timeout=request_timeout)
-
-        client.poll_interval = poll_interval
-        return (client,)
-
-
 class ImageGeneratorNode:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "model": (IMAGE_GENERATION_MODELS,),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
             },
@@ -541,7 +692,6 @@ class ImageGeneratorNode:
     CATEGORY = NODE_CATEGORY
 
     def generate(self,
-                 client,
                  model,
                  prompt,
                  negative_prompt=None,
@@ -583,7 +733,8 @@ class ImageGeneratorNode:
             generator.human_fidelity = human_fidelity
 
         try:
-            response = generator.run(client)
+            with _runtime_client() as client:
+                response = generator.run(client)
         except KLingAPIError as exc:
             _raise_with_image_model_guidance(exc, model)
         _log_final_unit_deduction(response, "image_generation")
@@ -615,7 +766,6 @@ class ImageExpanderNode:
 
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "image": ("IMAGE",),
                 "up_expansion_ratio": ("FLOAT", expansion_ratio_parameter),
                 "down_expansion_ratio": ("FLOAT", expansion_ratio_parameter),
@@ -647,7 +797,6 @@ class ImageExpanderNode:
     CATEGORY = NODE_CATEGORY
 
     def generate(self,
-                 client,
                  image,
                  prompt=None,
                  image_num=None,
@@ -665,7 +814,8 @@ class ImageExpanderNode:
         generator.right_expansion_ratio = right_expansion_ratio
         generator.prompt = prompt
         generator.n = image_num
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
 
         imgs = None
         for image_info in response.task_result.images:
@@ -685,7 +835,6 @@ class Image2VideoNode:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "model": (IMAGE_TO_VIDEO_MODELS,),
             },
             "optional": {
@@ -734,7 +883,6 @@ class Image2VideoNode:
     CATEGORY = NODE_CATEGORY
 
     def generate(self,
-                 client,
                  model,
                  image=None,
                  image_tail=None,
@@ -820,7 +968,8 @@ class Image2VideoNode:
             generator.reference_video = reference_video.strip()
 
         try:
-            response = generator.run(client)
+            with _runtime_client() as client:
+                response = generator.run(client)
         except KLingAPIError as exc:
             _raise_with_model_guidance(exc, model)
         _log_final_unit_deduction(response, "image2video")
@@ -838,7 +987,6 @@ class Text2VideoNode:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "model": (TEXT_TO_VIDEO_MODELS,),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
             },
@@ -886,7 +1034,6 @@ class Text2VideoNode:
     CATEGORY = NODE_CATEGORY
 
     def generate(self,
-                 client,
                  model,
                  prompt,
                  negative_prompt=None,
@@ -960,7 +1107,8 @@ class Text2VideoNode:
             generator.reference_video = reference_video.strip()
 
         try:
-            response = generator.run(client)
+            with _runtime_client() as client:
+                response = generator.run(client)
         except KLingAPIError as exc:
             _raise_with_model_guidance(exc, model)
         _log_final_unit_deduction(response, "text2video")
@@ -978,7 +1126,6 @@ class KolorsVirtualTryOnNode:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "model_name": (["kolors-virtual-try-on-v1", "kolors-virtual-try-on-v1-5"],),
                 "human_image": ("IMAGE",),
                 "cloth_image": ("IMAGE",),
@@ -995,7 +1142,6 @@ class KolorsVirtualTryOnNode:
     CATEGORY = NODE_CATEGORY
 
     def generate(self,
-                 client,
                  model_name,
                  human_image,
                  cloth_image=None):
@@ -1004,7 +1150,8 @@ class KolorsVirtualTryOnNode:
         generator.human_image = _image_to_base64(human_image)
         generator.cloth_image = _image_to_base64(cloth_image)
 
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
 
         for image_info in response.task_result.images:
             img = _images2tensor(_decode_image(_fetch_image(image_info.url)))
@@ -1133,7 +1280,6 @@ class VideoExtendNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "video_id": ("STRING", {"multiline": False, "default": ""}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
             }
@@ -1146,12 +1292,13 @@ class VideoExtendNode:
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("url", "video_id")
 
-    def run(self, client, video_id, prompt):
+    def run(self, video_id, prompt):
         generator = VideoExtend()
         generator.video_id = video_id
         generator.prompt = prompt
 
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
 
         for video_info in response.task_result.videos:
             print(f'KLing API output video id: {video_info.id}, url: {video_info.url}')
@@ -1245,7 +1392,6 @@ class LipSyncNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "input": (LIPSYNC_INPUT_TYPE,),
                 "face_id": ("STRING", {"multiline": False, "default": ""})
             },
@@ -1262,7 +1408,7 @@ class LipSyncNode:
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("url", "video_id")
 
-    def run(self, client, input, face_id, video_id=None, video_url=None):
+    def run(self, input, face_id, video_id=None, video_url=None):
         if not video_id and not video_url:
             raise Exception("Please input video_id or video_url.")
 
@@ -1273,7 +1419,8 @@ class LipSyncNode:
             input.face_id = face_id
         generator.input = input
 
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
 
         for video_info in response.task_result.videos:
             print(f'KLing API output video id: {video_info.id}, url: {video_info.url}')
@@ -1287,7 +1434,6 @@ class EffectNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "effect_scene": (
                     ["baseball", "inner_voice", "a_list_look", "memory_alive", "trampoline", "trampoline_night",
                      "pucker_up", "guess_what", "feed_mooncake", "rampage_ape", "flyer", "dishwasher",
@@ -1332,7 +1478,7 @@ class EffectNode:
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("url", "video_id")
 
-    def run(self, client, effect_scene, model_name, mode, duration, image0, image1=None):
+    def run(self, effect_scene, model_name, mode, duration, image0, image1=None):
 
         generator = Effects()
         generator.effect_scene = effect_scene
@@ -1351,7 +1497,8 @@ class EffectNode:
                 raise Exception("This effect needs one image.")
             generator.input.image = _image_to_base64(image0) if image1 == None else _image_to_base64(image1)
 
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
 
         for video_info in response.task_result.videos:
             print(f'KLing API output video id: {video_info.id}, url: {video_info.url}')
@@ -1365,7 +1512,6 @@ class Video2AudioNode:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "video_id": ("STRING", {"multiline": False, "default": ""}),
                 "video_url": ("STRING", {"multiline": False, "default": ""}),
             },
@@ -1387,7 +1533,6 @@ class Video2AudioNode:
     CATEGORY = NODE_CATEGORY
 
     def generate(self,
-                 client,
                  video_id,
                  video_url,
                  sound_effect_prompt=None,
@@ -1409,7 +1554,8 @@ class Video2AudioNode:
         generator.bgm_prompt = bgm_prompt
         generator.asmr_mode = asmr_mode
 
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
 
         audio_info = response.task_result.audios[0]
         return (
@@ -1425,7 +1571,6 @@ class MultiImagesToVideoNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "model": (MULTI_IMAGE_TO_VIDEO_MODELS,),
                 "image_list": ("IMAGE",),
             },
@@ -1447,7 +1592,6 @@ class MultiImagesToVideoNode:
 
     def generate(
             self,
-            client,
             model,
             image_list,
             image_tail=None,
@@ -1492,7 +1636,8 @@ class MultiImagesToVideoNode:
             generator.image_tail = _image_to_base64(image_tail)
 
         try:
-            response = generator.run(client)
+            with _runtime_client() as client:
+                response = generator.run(client)
         except KLingAPIError as exc:
             _raise_with_model_guidance(exc, model)
         _log_final_unit_deduction(response, "multi_image2video")
@@ -1510,7 +1655,6 @@ class AdvancedCustomElementCreateNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "element_type": (["image_subject", "multi_image_subject", "video_character"],),
                 "element_name": ("STRING", {"multiline": False, "default": ""}),
                 "element_description": ("STRING", {"multiline": True, "default": ""}),
@@ -1532,7 +1676,6 @@ class AdvancedCustomElementCreateNode:
 
     def create(
             self,
-            client,
             element_type,
             element_name="",
             element_description="",
@@ -1661,7 +1804,8 @@ class AdvancedCustomElementCreateNode:
         generator.element_description = element_description
         generator.elementDescription = element_description
 
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
         _log_final_unit_deduction(response, "advanced_custom_element_create")
 
         elements = _extract_elements_from_response(response)
@@ -1687,7 +1831,6 @@ class AdvancedCustomElementQueryNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "query_mode": (["task_id", "element_id"],),
                 "identifier": ("STRING", {"multiline": False, "default": ""}),
             }
@@ -1699,7 +1842,7 @@ class AdvancedCustomElementQueryNode:
     OUTPUT_NODE = False
     CATEGORY = NODE_CATEGORY
 
-    def query(self, client, query_mode, identifier):
+    def query(self, query_mode, identifier):
         identifier = identifier.strip()
         if not identifier:
             raise ValueError("identifier is required.")
@@ -1715,12 +1858,13 @@ class AdvancedCustomElementQueryNode:
 
         last_error = None
         response = None
-        for path in candidate_paths:
-            try:
-                response = client.request("GET", path)
-                break
-            except Exception as exc:
-                last_error = exc
+        with _runtime_client() as client:
+            for path in candidate_paths:
+                try:
+                    response = client.request("GET", path)
+                    break
+                except Exception as exc:
+                    last_error = exc
 
         if response is None:
             raise last_error
@@ -1794,7 +1938,6 @@ class MotionControlNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "model_name": ("STRING", {"multiline": False, "default": "kling-v2-6"}),
                 "reference_image": ("IMAGE",),
                 "reference_video": ("STRING", {"multiline": False, "default": ""}),
@@ -1817,7 +1960,6 @@ class MotionControlNode:
 
     def generate(
             self,
-            client,
             model_name,
             reference_image,
             reference_video,
@@ -1853,7 +1995,8 @@ class MotionControlNode:
         for key, value in (extra_payload or {}).items():
             setattr(generator, key, value)
 
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
         _log_final_unit_deduction(response, "motion_control")
 
         for video_info in response.task_result.videos:
@@ -1869,7 +2012,6 @@ class TextToAudioNode:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "client": (CLIENT_TYPE,),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "duration": ("FLOAT", {
                     "default": 3.0,
@@ -1891,7 +2033,6 @@ class TextToAudioNode:
     CATEGORY = NODE_CATEGORY
 
     def generate(self,
-                 client,
                  prompt,
                  duration,
                  ):
@@ -1899,7 +2040,8 @@ class TextToAudioNode:
 
         generator.prompt = prompt
         generator.duration = duration
-        response = generator.run(client)
+        with _runtime_client() as client:
+            response = generator.run(client)
 
         url_mp3 = getattr(response.task_result.audios[0], 'url_mp3', None)
         if not isinstance(url_mp3, str) or not url_mp3.strip():

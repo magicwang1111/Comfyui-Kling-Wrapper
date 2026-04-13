@@ -1,6 +1,6 @@
 from .api.capabilities import NODE_PREFIX
 from .nodes import AdvancedCustomElementCreateNode, AdvancedCustomElementQueryNode, EffectNode, ElementListBuilderNode, \
-    Image2VideoNode, ImageExpanderNode, ImageGeneratorNode, KLingAIAPIClient, KolorsVirtualTryOnNode, LipSyncAudioInputNode, \
+    Image2VideoNode, ImageExpanderNode, ImageGeneratorNode, KolorsVirtualTryOnNode, LipSyncAudioInputNode, \
     LipSyncNode, LipSyncTextInputNode, MotionControlNode, MultiImagesToVideoNode, PreviewAudio, PreviewVideo, Text2VideoNode, \
     TextToAudioNode, Video2AudioNode, VideoExtendNode
 
@@ -10,7 +10,6 @@ def _node_name(label):
 
 
 NODE_CLASS_MAPPINGS = {
-    _node_name("Client"): KLingAIAPIClient,
     _node_name("Image Generator"): ImageGeneratorNode,
     _node_name("Image Expander"): ImageExpanderNode,
     _node_name("TextToAudio"): TextToAudioNode,

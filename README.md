@@ -96,16 +96,30 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
    pip install -r requirements.txt
    ```
 
-4. Either:
+4. Create `config.local.json` in the repository root.
 
-   - fill `access_key` and `secret_key` directly in the `Comfyui-Kling-Wrapper Client` node, or
-   - store them in [config.ini](./config.ini) and leave the node fields empty
+   You can copy [config.example.json](./config.example.json) and fill in your Kling credentials:
+
+   ```json
+   {
+     "access_key": "",
+     "secret_key": "",
+     "poll_interval": 1.0,
+     "request_timeout": 30,
+     "area": "global"
+   }
+   ```
+
+   Notes:
+
+   - `config.local.json` is ignored by git and should hold your real private keys.
+   - `config.example.json` is only a template and is never read as live config.
+   - Legacy [config.ini](./config.ini) is still accepted as a fallback for `KLINGAI_API_ACCESS_KEY` and `KLINGAI_API_SECRET_KEY`.
 
 5. Restart ComfyUI and search for nodes prefixed with `Comfyui-Kling-Wrapper`.
 
 ## Node list
 
-- `Comfyui-Kling-Wrapper Client`
 - `Comfyui-Kling-Wrapper Image Generator`
 - `Comfyui-Kling-Wrapper Image Expander`
 - `Comfyui-Kling-Wrapper Text2Video`
@@ -141,6 +155,8 @@ These presets are mainly intended for models that support native audio generatio
 ## Examples
 
 Example workflows and small Python snippets live in [examples/README.md](./examples/README.md).
+
+The workflow JSON files no longer depend on a front-end `Client` node. Prepare `config.local.json` first, then import the workflow you want to run.
 
 ## Official references
 

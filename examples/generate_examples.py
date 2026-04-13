@@ -61,6 +61,55 @@ def workflow(nodes, links):
     }
 
 
+def strip_client_dependency(data):
+    data = json.loads(json.dumps(data))
+    client_node_type = f"{NODE_PREFIX} Client"
+    removed_link_ids = set()
+    removed_node_ids = set()
+    cleaned_nodes = []
+
+    for workflow_node in data["nodes"]:
+        if workflow_node.get("type") == client_node_type:
+            removed_node_ids.add(workflow_node["id"])
+            continue
+
+        cleaned_inputs = []
+        for node_input in workflow_node.get("inputs", []):
+            if node_input.get("type") == CLIENT_TYPE or node_input.get("name") == "client":
+                if node_input.get("link") is not None:
+                    removed_link_ids.add(node_input["link"])
+                continue
+            cleaned_inputs.append(node_input)
+
+        workflow_node["inputs"] = cleaned_inputs
+        cleaned_nodes.append(workflow_node)
+
+    cleaned_links = []
+    for workflow_link in data.get("links", []):
+        link_id, src_node, _, dst_node, _, link_type = workflow_link
+        if link_type == CLIENT_TYPE or src_node in removed_node_ids or dst_node in removed_node_ids:
+            removed_link_ids.add(link_id)
+            continue
+        cleaned_links.append(workflow_link)
+
+    for workflow_node in cleaned_nodes:
+        for node_input in workflow_node.get("inputs", []):
+            if node_input.get("link") in removed_link_ids:
+                node_input["link"] = None
+
+        for node_output in workflow_node.get("outputs", []):
+            links = node_output.get("links")
+            if isinstance(links, list):
+                links = [link_id for link_id in links if link_id not in removed_link_ids]
+                node_output["links"] = links or None
+
+    data["nodes"] = cleaned_nodes
+    data["links"] = cleaned_links
+    data["last_node_id"] = max((node["id"] for node in cleaned_nodes), default=0)
+    data["last_link_id"] = max((link[0] for link in cleaned_links), default=0)
+    return data
+
+
 def client_node(node_id=1, order=0, area="china"):
     type_name = f"{NODE_PREFIX} Client"
     return node(
@@ -507,7 +556,8 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 
 ## Before running the workflows
 
-- Fill in `access_key` and `secret_key` in the `Comfyui-Kling-Wrapper Client` node, or leave them empty and use `config.ini`.
+- Create and fill in `config.local.json` in the repository root before importing the workflows.
+- You can copy `config.example.json` in the repository root as a starting template.
 - Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, and `example_scene.png` with files that exist in your ComfyUI input directory.
 - Replace placeholder URLs such as `https://example.com/reference-motion.mp4` with real URLs when needed.
 - Native `sound` and `voice_preset` support is currently only verified for `kling-v2-6`.
@@ -950,7 +1000,7 @@ def generate_workflows():
     examples["14_comfyui_kling_wrapper_effects_single_image.json"] = workflow(nodes, links)
 
     for name, data in examples.items():
-        write_json(name, data)
+        write_json(name, strip_client_dependency(data))
 
 
 if __name__ == "__main__":

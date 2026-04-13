@@ -4,7 +4,8 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 
 ## Before running the workflows
 
-- Fill in `access_key` and `secret_key` in the `Comfyui-Kling-Wrapper Client` node, or leave them empty and use `config.ini`.
+- Create and fill in `config.local.json` in the repository root before importing the workflows.
+- You can copy `config.example.json` in the repository root as a starting template.
 - Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, and `example_scene.png` with files that exist in your ComfyUI input directory.
 - Replace placeholder URLs such as `https://example.com/reference-motion.mp4` with real URLs when needed.
 - Native `sound` and `voice_preset` support is currently only verified for `kling-v2-6`.
