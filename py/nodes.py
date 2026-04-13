@@ -639,6 +639,16 @@ def _saved_result(filename, subfolder, folder_type):
     }
 
 
+def _build_local_media_view_url(filename, subfolder, folder_type):
+    query = [
+        f"type={urllib.parse.quote(str(folder_type), safe='')}",
+        f"filename={urllib.parse.quote(str(filename), safe='')}",
+    ]
+    if subfolder:
+        query.append(f"subfolder={urllib.parse.quote(str(subfolder), safe='')}")
+    return "/api/view?" + "&".join(query)
+
+
 class ImageGeneratorNode:
     @classmethod
     def INPUT_TYPES(s):
@@ -1191,14 +1201,17 @@ class PreviewVideo:
         ) = folder_paths.get_save_image_path(filename_prefix, output_dir)
         file = f"{filename}_{counter:05}_.mp4"
         file_path = os.path.join(full_output_folder, file)
+        preview_url = _build_local_media_view_url(file, subfolder, "output")
 
         if type(video_url) == list:
             video_url = video_url[0]
-        open(file_path, "wb").write(_fetch_image(video_url))
+        with open(file_path, "wb") as handle:
+            handle.write(_fetch_image(video_url))
 
         return {
             "ui": {
                 "images": [_saved_result(file, subfolder, "output")],
+                "video_url": [preview_url],
                 "animated": (True,),
             },
             "result": (file_path,),

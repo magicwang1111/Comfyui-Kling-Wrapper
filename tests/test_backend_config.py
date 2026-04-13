@@ -123,6 +123,32 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(url, "https://example.com/video.mp4")
         self.assertEqual(video_id, "video-123")
 
+    def test_preview_video_returns_local_video_url_when_saved(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            with mock.patch.object(kling_nodes.folder_paths, "get_output_directory", return_value=str(tmpdir_path)):
+                with mock.patch.object(
+                    kling_nodes.folder_paths,
+                    "get_save_image_path",
+                    return_value=(str(tmpdir_path), "Comfyui-Kling-Wrapper", 1, "", None),
+                ):
+                    with mock.patch.object(kling_nodes, "_fetch_image", return_value=b"video-bytes"):
+                        result = kling_nodes.PreviewVideo().run(
+                            "https://example.com/video.mp4",
+                            "Comfyui-Kling-Wrapper",
+                            True,
+                        )
+
+        self.assertEqual(
+            result["ui"]["video_url"],
+            ["/api/view?type=output&filename=Comfyui-Kling-Wrapper_00001_.mp4"],
+        )
+        self.assertEqual(
+            result["ui"]["images"][0]["filename"],
+            "Comfyui-Kling-Wrapper_00001_.mp4",
+        )
+
     def test_examples_are_client_free_and_valid_json(self):
         examples_dir = REPO_ROOT / "examples"
         example_files = sorted(examples_dir.glob("*.json"))
