@@ -9,6 +9,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import httpx
+import requests
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMFYUI_ROOT = REPO_ROOT.parent.parent
@@ -19,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 
 kling_package = importlib.import_module("py")
 kling_nodes = importlib.import_module("py.nodes")
+kling_client = importlib.import_module("py.api.client")
 
 
 ENV_KEYS = {
@@ -149,6 +153,38 @@ class BackendConfigTests(unittest.TestCase):
             "Comfyui-Kling-Wrapper_00001_.mp4",
         )
 
+    def test_preview_video_rejects_empty_video_url(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "empty video_url",
+        ):
+            kling_nodes.PreviewVideo().run("", "Comfyui-Kling-Wrapper", True)
+
+    def test_upload_file_to_tmpfiles_retries_transient_ssl_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_path = Path(tmpdir) / "sample.mp4"
+            file_path.write_bytes(b"video-bytes")
+
+            success_response = mock.Mock()
+            success_response.raise_for_status.return_value = None
+            success_response.json.return_value = {
+                "status": "success",
+                "data": {"url": "https://tmpfiles.org/123/sample.mp4"},
+            }
+
+            with mock.patch.object(
+                kling_nodes.requests,
+                "post",
+                side_effect=[
+                    requests.exceptions.SSLError("EOF occurred in violation of protocol"),
+                    success_response,
+                ],
+            ) as post_mock:
+                url = kling_nodes._upload_file_to_tmpfiles(file_path)
+
+        self.assertEqual(url, "https://tmpfiles.org/dl/123/sample.mp4")
+        self.assertEqual(post_mock.call_count, 2)
+
     def test_motion_control_exposes_model_dropdown(self):
         input_types = kling_nodes.MotionControlNode.INPUT_TYPES()
         required = input_types["required"]
@@ -270,6 +306,150 @@ class BackendConfigTests(unittest.TestCase):
             "https://tmpfiles.org/dl/img/ref.png",
         )
         self.assertEqual(FakeMotionControl.last_instance.duration, "7")
+
+    def test_motion_control_accepts_alternate_video_url_fields(self):
+        sentinel_client = object()
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        class FakeMotionControl:
+            last_instance = None
+
+            def __init__(self):
+                FakeMotionControl.last_instance = self
+
+            def run(self, client):
+                self.seen_client = client
+                return SimpleNamespace(
+                    final_unit_deduction=1.0,
+                    task_status="succeed",
+                    task_result=SimpleNamespace(
+                        videos=[SimpleNamespace(video_url="https://example.com/video-from-alias.mp4", id="video-456")]
+                    ),
+                )
+
+        class FakeVideo:
+            def get_duration(self):
+                return 7.0
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "MotionControl", FakeMotionControl):
+                with mock.patch.object(kling_nodes, "_upload_image_reference", return_value="https://tmpfiles.org/dl/img/ref.png"):
+                    with mock.patch.object(
+                        kling_nodes,
+                        "_upload_video_reference",
+                        return_value="https://tmpfiles.org/dl/456/reference.mp4",
+                    ):
+                        url, video_id = kling_nodes.MotionControlNode().generate(
+                            model_name="kling-v2-6",
+                            reference_image=object(),
+                            reference_video_input=FakeVideo(),
+                        )
+
+        self.assertEqual(url, "https://example.com/video-from-alias.mp4")
+        self.assertEqual(video_id, "video-456")
+
+    def test_motion_control_raises_task_failure_details(self):
+        sentinel_client = object()
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        class FakeMotionControl:
+            def run(self, client):
+                return SimpleNamespace(
+                    final_unit_deduction=0.0,
+                    task_status="failed",
+                    task_status_msg="reference video duration exceeds backend limit",
+                    task_result=SimpleNamespace(videos=[]),
+                )
+
+        class FakeVideo:
+            def get_duration(self):
+                return 12.0
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "MotionControl", FakeMotionControl):
+                with mock.patch.object(kling_nodes, "_upload_image_reference", return_value="https://tmpfiles.org/dl/img/ref.png"):
+                    with mock.patch.object(
+                        kling_nodes,
+                        "_upload_video_reference",
+                        return_value="https://tmpfiles.org/dl/456/reference.mp4",
+                    ):
+                        with self.assertRaisesRegex(
+                            ValueError,
+                            "task_status='failed'.*reference video duration exceeds backend limit",
+                        ):
+                            kling_nodes.MotionControlNode().generate(
+                                model_name="kling-v2-6",
+                                reference_image=object(),
+                                reference_video_input=FakeVideo(),
+                            )
+
+    def test_client_retries_transient_get_transport_error(self):
+        first_client = mock.Mock()
+        second_client = mock.Mock()
+        ok_response = mock.Mock()
+        ok_response.status_code = 200
+        ok_response.json.return_value = {"data": {"task_status": "submitted"}}
+
+        first_client.request.side_effect = httpx.RemoteProtocolError(
+            "Server disconnected without sending a response."
+        )
+        second_client.request.return_value = ok_response
+
+        with mock.patch.object(kling_client.jwt, "encode", return_value="token"):
+            with mock.patch.object(
+                kling_client.httpx,
+                "Client",
+                side_effect=[first_client, second_client],
+            ):
+                client = kling_client.Client(
+                    access_key="ak",
+                    secret_key="sk",
+                    in_china=True,
+                    timeout=30,
+                    poll_interval=0.01,
+                )
+                result = client.request("GET", "/v1/videos/motion-control/task-123")
+
+        self.assertEqual(result, {"data": {"task_status": "submitted"}})
+        self.assertEqual(first_client.request.call_count, 1)
+        self.assertEqual(second_client.request.call_count, 1)
+
+    def test_client_retries_transient_post_connect_error(self):
+        first_client = mock.Mock()
+        second_client = mock.Mock()
+        ok_response = mock.Mock()
+        ok_response.status_code = 200
+        ok_response.json.return_value = {"data": {"task_id": "task-123"}}
+
+        first_client.request.side_effect = httpx.ConnectError(
+            "[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol"
+        )
+        second_client.request.return_value = ok_response
+
+        with mock.patch.object(kling_client.jwt, "encode", return_value="token"):
+            with mock.patch.object(
+                kling_client.httpx,
+                "Client",
+                side_effect=[first_client, second_client],
+            ):
+                client = kling_client.Client(
+                    access_key="ak",
+                    secret_key="sk",
+                    in_china=True,
+                    timeout=30,
+                    poll_interval=0.01,
+                )
+                result = client.request("POST", "/v1/videos/motion-control", json={"prompt": "test"})
+
+        self.assertEqual(result, {"data": {"task_id": "task-123"}})
+        self.assertEqual(first_client.request.call_count, 1)
+        self.assertEqual(second_client.request.call_count, 1)
 
     def test_motion_control_rejects_direct_reference_video_url(self):
         with self.assertRaisesRegex(

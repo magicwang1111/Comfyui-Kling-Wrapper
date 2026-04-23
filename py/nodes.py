@@ -44,6 +44,8 @@ MOTION_CONTROL_MODELS = ["kling-v2-6", "kling-v3"]
 MOTION_CONTROL_DURATIONS = ["auto", "3", "5", "10", "15", "30"]
 TMPFILES_UPLOAD_API_URL = "https://tmpfiles.org/api/v1/upload"
 TMPFILES_MAX_SIZE_BYTES = 100 * 1024 * 1024
+TMPFILES_UPLOAD_RETRY_COUNT = 3
+TMPFILES_UPLOAD_RETRY_DELAY = 1.0
 DEFAULT_REFERENCE_VIDEO_FPS = 24.0
 LIPSYNC_AUDIO_TYPES = {
     "阳光少年": "genshin_vindi2",
@@ -501,8 +503,50 @@ def _raise_with_image_model_guidance(exc, model_name):
 def _preferred_media_url(media_info, prefer_watermark=False):
     watermark_url = getattr(media_info, "watermark_url", None)
     if prefer_watermark and isinstance(watermark_url, str) and watermark_url.strip():
-        return watermark_url
-    return getattr(media_info, "url", None)
+        return watermark_url.strip()
+
+    for field_name in ("url", "video_url", "resource_url", "image_url"):
+        candidate = getattr(media_info, field_name, None)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+
+    if isinstance(watermark_url, str) and watermark_url.strip():
+        return watermark_url.strip()
+
+    return None
+
+
+def _extract_first_video_result(response, task_name):
+    task_status = getattr(response, "task_status", None)
+    task_status_msg = getattr(response, "task_status_msg", None)
+    task_result = getattr(response, "task_result", None)
+    videos = getattr(task_result, "videos", None) or []
+
+    if task_status not in (None, "", "succeed", "success", "completed"):
+        details = f"{task_name} failed with task_status={task_status!r}"
+        if task_status_msg:
+            details += f": {task_status_msg}"
+        raise ValueError(details)
+
+    if not videos:
+        details = f"{task_name} did not return any videos."
+        if task_status:
+            details += f" task_status={task_status!r}."
+        if task_status_msg:
+            details += f" Details: {task_status_msg}"
+        raise ValueError(details)
+
+    for video_info in videos:
+        video_url = _preferred_media_url(video_info)
+        if video_url:
+            return video_url, getattr(video_info, "id", "")
+
+    details = f"{task_name} completed but returned an empty video URL."
+    if task_status:
+        details += f" task_status={task_status!r}."
+    if task_status_msg:
+        details += f" Details: {task_status_msg}"
+    raise ValueError(details)
 
 
 def _log_final_unit_deduction(response, task_name):
@@ -687,12 +731,26 @@ def _upload_file_to_tmpfiles(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT):
         raise ValueError("Local media file exceeds tmpfiles.org's 100 MB upload limit.")
 
     filename = os.path.basename(normalized_path)
-    with open(normalized_path, "rb") as handle:
-        response = requests.post(
-            TMPFILES_UPLOAD_API_URL,
-            files={"file": (filename, handle)},
-            timeout=float(timeout),
-        )
+    for attempt in range(1, TMPFILES_UPLOAD_RETRY_COUNT + 1):
+        try:
+            with open(normalized_path, "rb") as handle:
+                response = requests.post(
+                    TMPFILES_UPLOAD_API_URL,
+                    files={"file": (filename, handle)},
+                    timeout=float(timeout),
+                )
+            break
+        except requests.RequestException as exc:
+            if attempt >= TMPFILES_UPLOAD_RETRY_COUNT:
+                raise ConnectionError(
+                    "Temporary media upload failed after multiple attempts. "
+                    f"tmpfiles.org may be temporarily unavailable: {exc}"
+                ) from exc
+            print(
+                f"[{NODE_PREFIX}] tmpfiles upload retry {attempt}/{TMPFILES_UPLOAD_RETRY_COUNT} "
+                f"after transient error: {exc}"
+            )
+            time.sleep(TMPFILES_UPLOAD_RETRY_DELAY)
 
     try:
         response.raise_for_status()
@@ -1482,6 +1540,12 @@ class PreviewVideo:
 
         if type(video_url) == list:
             video_url = video_url[0]
+        video_url = str(video_url or "").strip()
+        if not video_url:
+            raise ValueError(
+                "PreviewVideo received an empty video_url. "
+                "The upstream node finished without a downloadable video URL."
+            )
         with open(file_path, "wb") as handle:
             handle.write(_fetch_image(video_url))
 
@@ -2312,13 +2376,9 @@ class MotionControlNode:
         with _runtime_client() as client:
             response = generator.run(client)
         _log_final_unit_deduction(response, "motion_control")
-
-        for video_info in response.task_result.videos:
-            video_url = _preferred_media_url(video_info)
-            print(f'KLing API output video id: {video_info.id}, url: {video_url}')
-            return (video_url, video_info.id)
-
-        return ("", "")
+        video_url, video_id = _extract_first_video_result(response, "motion_control")
+        print(f'KLing API output video id: {video_id}, url: {video_url}')
+        return (video_url, video_id)
 
 
 class TextToAudioNode:

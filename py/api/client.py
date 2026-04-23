@@ -5,6 +5,11 @@ from .exceptions import KLingAPIError
 from enum import Enum
 
 
+DEFAULT_GET_RETRY_COUNT = 3
+DEFAULT_GET_RETRY_DELAY = 1.0
+DEFAULT_CONNECT_RETRY_COUNT = 2
+
+
 def _raise_for_status(resp: httpx.Response) -> None:
     if resp.status_code != 200 or 'data' not in resp.json():
         raise KLingAPIError.from_response(resp)
@@ -31,19 +36,55 @@ class Client:
         self.poll_interval = poll_interval
 
     def request(self, method: str, path: str, **kwargs) -> dict:
+        method_upper = str(method or "").upper()
         if "json" in kwargs:
             import json as _json
             _preview = {k: (v[:60] + "...[truncated]" if isinstance(v, str) and len(v) > 60 else v) for k, v in kwargs["json"].items()}
             print(f"[KLING DEBUG] {method} {path} payload keys={list(kwargs['json'].keys())}")
             print(f"[KLING DEBUG] payload preview: {_json.dumps(_preview, default=str)[:500]}")
-        try:
-            resp = self._client.request(method, path, **kwargs)
-        except httpx.TimeoutException as exc:
-            raise TimeoutError(
-                f"Kling API request timed out after {self._timeout}s while waiting for {method} {path}. "
-                "Try increasing the client request_timeout, especially for advanced element creation "
-                "with multiple reference images."
-            ) from exc
+        retry_count = DEFAULT_GET_RETRY_COUNT if method_upper == "GET" else DEFAULT_CONNECT_RETRY_COUNT
+        for attempt in range(1, retry_count + 1):
+            try:
+                resp = self._client.request(method, path, **kwargs)
+                break
+            except httpx.ConnectError as exc:
+                if attempt < retry_count:
+                    print(
+                        f"[KLING DEBUG] retrying {method_upper} {path} after connect error "
+                        f"({attempt}/{retry_count}): {exc}"
+                    )
+                    self.close()
+                    time.sleep(DEFAULT_GET_RETRY_DELAY)
+                    continue
+                raise ConnectionError(
+                    f"Kling API request failed while connecting for {method} {path}: {exc}"
+                ) from exc
+            except httpx.TimeoutException as exc:
+                if method_upper == "GET" and attempt < retry_count:
+                    print(
+                        f"[KLING DEBUG] retrying {method_upper} {path} after timeout "
+                        f"({attempt}/{retry_count}): {exc}"
+                    )
+                    self.close()
+                    time.sleep(DEFAULT_GET_RETRY_DELAY)
+                    continue
+                raise TimeoutError(
+                    f"Kling API request timed out after {self._timeout}s while waiting for {method} {path}. "
+                    "Try increasing the client request_timeout, especially for advanced element creation "
+                    "with multiple reference images."
+                ) from exc
+            except httpx.TransportError as exc:
+                if method_upper == "GET" and attempt < retry_count:
+                    print(
+                        f"[KLING DEBUG] retrying {method_upper} {path} after transport error "
+                        f"({attempt}/{retry_count}): {exc}"
+                    )
+                    self.close()
+                    time.sleep(DEFAULT_GET_RETRY_DELAY)
+                    continue
+                raise ConnectionError(
+                    f"Kling API request failed during transport for {method} {path}: {exc}"
+                ) from exc
         _raise_for_status(resp)
         return resp.json()
 
@@ -71,7 +112,7 @@ class Client:
 
     @property
     def _client(self) -> httpx.Client:
-        if self._is_expired:
+        if self.__client is None or self._is_expired:
             base_url = str(self._area.value)
             headers = {
                 "Content-Type": "application/json",
