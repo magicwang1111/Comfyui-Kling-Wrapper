@@ -138,6 +138,18 @@ def load_image_node(node_id, filename, pos, order):
     )
 
 
+def load_video_node(node_id, filename, pos, order):
+    return node(
+        node_id,
+        "LoadVideo",
+        pos,
+        [320, 120],
+        order,
+        [filename],
+        outputs=[output_slot("VIDEO", "VIDEO", slot_index=0)],
+    )
+
+
 def save_image_node(node_id, filename_prefix, pos, order, link_id):
     return node(
         node_id,
@@ -519,20 +531,21 @@ def motion_control_node(node_id, pos, order):
         node_id,
         type_name,
         pos,
-        [420, 320],
+        [430, 420],
         order,
         [
             "kling-v2-6",
-            "https://example.com/reference-motion.mp4",
             "Transfer the body motion naturally while keeping the subject stable and realistic.",
             "",
             "pro",
-            "5",
+            "auto",
+            "video",
+            True,
             "",
         ],
         inputs=[
-            input_slot("client", CLIENT_TYPE),
             input_slot("reference_image", "IMAGE"),
+            input_slot("reference_video_input", "VIDEO"),
         ],
         outputs=[
             output_slot("url", "STRING", slot_index=0),
@@ -842,15 +855,15 @@ def generate_workflows():
     examples["06_comfyui_kling_wrapper_advanced_element_subject_to_image2video.json"] = workflow(nodes, links)
 
     nodes = [
-        client_node(1, 0),
-        load_image_node(2, "example_motion_subject.png", [40, 330], 1),
-        motion_control_node(3, [430, 190], 2),
-        preview_video_node(4, [930, 190], 3, 3),
+        load_image_node(2, "example_motion_subject.png", [40, 260], 1),
+        load_video_node(3, "example_motion_reference.mp4", [40, 670], 2),
+        motion_control_node(4, [460, 220], 3),
+        preview_video_node(5, [980, 220], 4, 3),
     ]
     links = [
-        link(1, 1, 0, 3, 0, CLIENT_TYPE),
-        link(2, 2, 0, 3, 1, "IMAGE"),
-        link(3, 3, 0, 4, 0, "STRING"),
+        link(1, 2, 0, 4, 0, "IMAGE"),
+        link(2, 3, 0, 4, 1, "VIDEO"),
+        link(3, 4, 0, 5, 0, "STRING"),
     ]
     nodes[2]["inputs"][0]["link"] = 1
     nodes[2]["inputs"][1]["link"] = 2

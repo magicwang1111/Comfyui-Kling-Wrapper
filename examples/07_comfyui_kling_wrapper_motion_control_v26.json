@@ -1,7 +1,7 @@
 {
   "id": "Comfyui-Kling-Wrapper-example",
   "revision": 0,
-  "last_node_id": 4,
+  "last_node_id": 5,
   "last_link_id": 3,
   "nodes": [
     {
@@ -9,7 +9,7 @@
       "type": "LoadImage",
       "pos": [
         40,
-        330
+        260
       ],
       "size": [
         290,
@@ -23,7 +23,9 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": null,
+          "links": [
+            1
+          ],
           "slot_index": 0
         },
         {
@@ -43,24 +45,61 @@
     },
     {
       "id": 3,
-      "type": "Comfyui-Kling-Wrapper Motion Control",
+      "type": "LoadVideo",
       "pos": [
-        430,
-        190
+        40,
+        670
       ],
       "size": [
-        420,
-        320
+        320,
+        120
       ],
       "flags": {},
       "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            2
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadVideo"
+      },
+      "widgets_values": [
+        "example_motion_reference.mp4"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Comfyui-Kling-Wrapper Motion Control",
+      "pos": [
+        460,
+        220
+      ],
+      "size": [
+        430,
+        420
+      ],
+      "flags": {},
+      "order": 3,
       "mode": 0,
       "inputs": [
         {
           "name": "reference_image",
           "type": "IMAGE",
-          "link": 2,
+          "link": 1,
           "shape": 7
+        },
+        {
+          "name": "reference_video_input",
+          "type": "VIDEO",
+          "link": 2
         }
       ],
       "outputs": [
@@ -84,27 +123,28 @@
       },
       "widgets_values": [
         "kling-v2-6",
-        "https://example.com/reference-motion.mp4",
         "Transfer the body motion naturally while keeping the subject stable and realistic.",
         "",
         "pro",
-        "5",
+        "auto",
+        "video",
+        true,
         ""
       ]
     },
     {
-      "id": 4,
+      "id": 5,
       "type": "Comfyui-Kling-Wrapper Preview Video",
       "pos": [
-        930,
-        190
+        980,
+        220
       ],
       "size": [
         430,
         820
       ],
       "flags": {},
-      "order": 3,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
@@ -132,18 +172,26 @@
   ],
   "links": [
     [
-      2,
+      1,
       2,
       0,
-      3,
-      1,
+      4,
+      0,
       "IMAGE"
     ],
     [
-      3,
+      2,
       3,
       0,
       4,
+      1,
+      "VIDEO"
+    ],
+    [
+      3,
+      4,
+      0,
+      5,
       0,
       "STRING"
     ]

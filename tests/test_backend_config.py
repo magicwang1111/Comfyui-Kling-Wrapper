@@ -314,6 +314,10 @@ class BackendConfigTests(unittest.TestCase):
             self.assertIsInstance(data, dict)
             self.assertNotIn("Comfyui-Kling-Wrapper Client", content)
             self.assertNotIn("COMFYUI_KLING_WRAPPER_API_CLIENT", content)
+            if example_path.name == "07_comfyui_kling_wrapper_motion_control_v26.json":
+                self.assertIn("\"type\": \"LoadVideo\"", content)
+                self.assertIn("\"reference_video_input\"", content)
+                self.assertNotIn("reference-motion.mp4", content)
 
 
 if __name__ == "__main__":
