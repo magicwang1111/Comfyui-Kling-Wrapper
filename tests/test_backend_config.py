@@ -149,6 +149,160 @@ class BackendConfigTests(unittest.TestCase):
             "Comfyui-Kling-Wrapper_00001_.mp4",
         )
 
+    def test_motion_control_exposes_model_dropdown(self):
+        input_types = kling_nodes.MotionControlNode.INPUT_TYPES()
+        required = input_types["required"]
+        model_options, metadata = required["model_name"]
+        duration_options, duration_metadata = input_types["optional"]["duration"]
+
+        self.assertEqual(model_options, kling_nodes.MOTION_CONTROL_MODELS)
+        self.assertEqual(metadata["default"], "kling-v2-6")
+        self.assertEqual(duration_options, kling_nodes.MOTION_CONTROL_DURATIONS)
+        self.assertEqual(duration_metadata["default"], "auto")
+        self.assertNotIn("reference_video", input_types["optional"])
+
+    def test_motion_control_uploads_reference_video_frames(self):
+        sentinel_client = object()
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        class FakeMotionControl:
+            last_instance = None
+
+            def __init__(self):
+                FakeMotionControl.last_instance = self
+
+            def run(self, client):
+                self.seen_client = client
+                return SimpleNamespace(
+                    final_unit_deduction=1.0,
+                    task_result=SimpleNamespace(
+                        videos=[SimpleNamespace(url="https://example.com/video.mp4", id="video-123")]
+                    ),
+                )
+
+        fake_frames = object()
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "MotionControl", FakeMotionControl):
+                with mock.patch.object(kling_nodes, "_upload_image_reference", return_value="https://tmpfiles.org/dl/img/ref.png"):
+                    with mock.patch.object(
+                        kling_nodes,
+                        "_upload_reference_video_frames",
+                        return_value="https://tmpfiles.org/dl/123/reference.mp4",
+                    ) as upload_mock:
+                        url, video_id = kling_nodes.MotionControlNode().generate(
+                            model_name="kling-v2-6",
+                            reference_image=object(),
+                            reference_video_frames=fake_frames,
+                            reference_video_info={"loaded_duration": 12.5, "loaded_fps": 12.5},
+                        )
+
+        self.assertEqual(url, "https://example.com/video.mp4")
+        self.assertEqual(video_id, "video-123")
+        upload_mock.assert_called_once_with(fake_frames, {"loaded_duration": 12.5, "loaded_fps": 12.5})
+        self.assertEqual(
+            FakeMotionControl.last_instance.image_url,
+            "https://tmpfiles.org/dl/img/ref.png",
+        )
+        self.assertEqual(
+            FakeMotionControl.last_instance.video_url,
+            "https://tmpfiles.org/dl/123/reference.mp4",
+        )
+        self.assertEqual(FakeMotionControl.last_instance.duration, "12.5")
+        self.assertEqual(FakeMotionControl.last_instance.character_orientation, "video")
+        self.assertEqual(FakeMotionControl.last_instance.keep_original_sound, "yes")
+        self.assertEqual(FakeMotionControl.last_instance.seen_client, sentinel_client)
+
+    def test_motion_control_uploads_video_input(self):
+        sentinel_client = object()
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        class FakeMotionControl:
+            last_instance = None
+
+            def __init__(self):
+                FakeMotionControl.last_instance = self
+
+            def run(self, client):
+                self.seen_client = client
+                return SimpleNamespace(
+                    final_unit_deduction=1.0,
+                    task_result=SimpleNamespace(
+                        videos=[SimpleNamespace(url="https://example.com/video.mp4", id="video-123")]
+                    ),
+                )
+
+        class FakeVideo:
+            def get_duration(self):
+                return 7.0
+
+        fake_video = FakeVideo()
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "MotionControl", FakeMotionControl):
+                with mock.patch.object(kling_nodes, "_upload_image_reference", return_value="https://tmpfiles.org/dl/img/ref.png"):
+                    with mock.patch.object(
+                        kling_nodes,
+                        "_upload_video_reference",
+                        return_value="https://tmpfiles.org/dl/456/reference.mp4",
+                    ) as upload_mock:
+                        url, video_id = kling_nodes.MotionControlNode().generate(
+                            model_name="kling-v2-6",
+                            reference_image=object(),
+                            reference_video_input=fake_video,
+                        )
+
+        self.assertEqual(url, "https://example.com/video.mp4")
+        self.assertEqual(video_id, "video-123")
+        upload_mock.assert_called_once_with(fake_video)
+        self.assertEqual(
+            FakeMotionControl.last_instance.video_url,
+            "https://tmpfiles.org/dl/456/reference.mp4",
+        )
+        self.assertEqual(
+            FakeMotionControl.last_instance.image_url,
+            "https://tmpfiles.org/dl/img/ref.png",
+        )
+        self.assertEqual(FakeMotionControl.last_instance.duration, "7")
+
+    def test_motion_control_rejects_direct_reference_video_url(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "Direct reference_video URLs are no longer supported",
+        ):
+            kling_nodes.MotionControlNode().generate(
+                model_name="kling-v2-6",
+                reference_image=object(),
+                reference_video="https://example.com/reference-motion.mp4",
+            )
+
+    def test_motion_control_auto_duration_requires_video_timing(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "duration='auto' requires",
+        ):
+            with mock.patch.object(
+                kling_nodes,
+                "_upload_reference_video_frames",
+                return_value="https://tmpfiles.org/dl/789/reference.mp4",
+            ):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_upload_image_reference",
+                    return_value="https://tmpfiles.org/dl/img/ref.png",
+                ):
+                    kling_nodes.MotionControlNode().generate(
+                        model_name="kling-v2-6",
+                        reference_image=object(),
+                        reference_video_frames=object(),
+                    )
+
     def test_examples_are_client_free_and_valid_json(self):
         examples_dir = REPO_ROOT / "examples"
         example_files = sorted(examples_dir.glob("*.json"))

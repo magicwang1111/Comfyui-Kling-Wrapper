@@ -140,6 +140,36 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 - `Comfyui-Kling-Wrapper Preview Video`
 - `Comfyui-Kling-Wrapper Preview Audio`
 
+## Motion control notes
+
+`Motion Control` now accepts reference video only from workflow inputs:
+
+- `reference_video_input`: connect a node that outputs `VIDEO`
+- `reference_video_frames` + `reference_video_info`: connect an uploaded video loader that outputs decoded frames plus timing metadata
+
+Direct reference-video URLs are no longer supported in this node.
+
+The visible `model_name` dropdown for motion control is:
+
+- `kling-v2-6`
+- `kling-v3`
+
+`duration` is now a dropdown with:
+
+- `auto`
+- `3`
+- `5`
+- `10`
+- `15`
+- `30`
+
+When `duration` is set to `auto`, the node tries to match the uploaded reference video's duration using the connected video metadata or the `VIDEO` input object.
+
+`character_orientation` controls whether subject orientation follows the reference image or the reference video:
+
+- `image`: keep orientation from the reference image while transferring motion from the video
+- `video`: follow both motion and orientation from the reference video
+
 ## Voice presets
 
 `Text2Video` and `Image2Video` expose a `voice_preset` dropdown instead of requiring manual `voice_list` JSON.

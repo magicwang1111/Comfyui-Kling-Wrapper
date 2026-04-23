@@ -14,6 +14,9 @@ import io
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import numpy
 import PIL
 import requests
@@ -33,9 +36,15 @@ LEGACY_CONFIG_SECTION = "API"
 DEFAULT_FILENAME_PREFIX = NODE_PREFIX
 DEFAULT_REQUEST_TIMEOUT = 30
 DEFAULT_POLL_INTERVAL = 1.0
+DEFAULT_UPLOAD_TIMEOUT = 120
 DEFAULT_AREA_OPTIONS = ["global", "china"]
 CAMERA_CONTROL_TYPES = ["None", "simple", "down_back", "forward_up", "right_turn_forward", "left_turn_forward"]
 CAMERA_CONTROL_CONFIGS = ["horizontal", "vertical", "pan", "tilt", "roll", "zoom"]
+MOTION_CONTROL_MODELS = ["kling-v2-6", "kling-v3"]
+MOTION_CONTROL_DURATIONS = ["auto", "3", "5", "10", "15", "30"]
+TMPFILES_UPLOAD_API_URL = "https://tmpfiles.org/api/v1/upload"
+TMPFILES_MAX_SIZE_BYTES = 100 * 1024 * 1024
+DEFAULT_REFERENCE_VIDEO_FPS = 24.0
 LIPSYNC_AUDIO_TYPES = {
     "阳光少年": "genshin_vindi2",
     "懂事小弟": "zhinen_xuesheng",
@@ -647,6 +656,274 @@ def _build_local_media_view_url(filename, subfolder, folder_type):
     if subfolder:
         query.append(f"subfolder={urllib.parse.quote(str(subfolder), safe='')}")
     return "/api/view?" + "&".join(query)
+
+
+def _normalize_tmpfiles_download_url(page_url):
+    normalized = str(page_url or "").strip()
+    if not normalized:
+        raise ValueError("Upload service did not return a file URL.")
+
+    parsed = urllib.parse.urlparse(normalized)
+    if parsed.netloc.lower() != "tmpfiles.org":
+        return normalized
+
+    path = parsed.path.strip("/")
+    if not path:
+        raise ValueError("Upload service returned an invalid tmpfiles URL.")
+
+    if path.startswith("dl/"):
+        return f"https://tmpfiles.org/{path}"
+
+    return f"https://tmpfiles.org/dl/{path}"
+
+
+def _upload_file_to_tmpfiles(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT):
+    normalized_path = os.path.abspath(os.fspath(file_path))
+    if not os.path.exists(normalized_path):
+        raise ValueError(f"Upload file does not exist: {normalized_path}")
+
+    file_size = os.path.getsize(normalized_path)
+    if file_size > TMPFILES_MAX_SIZE_BYTES:
+        raise ValueError("Local media file exceeds tmpfiles.org's 100 MB upload limit.")
+
+    filename = os.path.basename(normalized_path)
+    with open(normalized_path, "rb") as handle:
+        response = requests.post(
+            TMPFILES_UPLOAD_API_URL,
+            files={"file": (filename, handle)},
+            timeout=float(timeout),
+        )
+
+    try:
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise ConnectionError(f"Temporary media upload failed: {exc}") from exc
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise ValueError("Temporary media upload returned invalid JSON.") from exc
+
+    if payload.get("status") != "success":
+        raise ValueError(f"Temporary media upload failed: {payload}")
+
+    page_url = payload.get("data", {}).get("url")
+    return _normalize_tmpfiles_download_url(page_url)
+
+
+def _upload_video_reference(video):
+    if video is None:
+        raise ValueError("video is required.")
+
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as handle:
+        temp_path = handle.name
+
+    try:
+        video.save_to(temp_path)
+        return _upload_file_to_tmpfiles(temp_path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def _upload_image_reference(image):
+    if image is None:
+        raise ValueError("image is required.")
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
+        temp_path = handle.name
+
+    try:
+        first_frame = _tensor2images(image)[0]
+        first_frame.save(temp_path, format="PNG")
+        return _upload_file_to_tmpfiles(temp_path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def _find_ffmpeg_path():
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+        ffmpeg_path = get_ffmpeg_exe()
+        if ffmpeg_path:
+            return ffmpeg_path
+    except Exception:
+        pass
+
+    ffmpeg_path = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
+    if ffmpeg_path:
+        return ffmpeg_path
+
+    raise RuntimeError(
+        "ffmpeg is required to encode reference_video_frames. Install imageio-ffmpeg or make ffmpeg available on PATH."
+    )
+
+
+def _resolve_reference_video_fps(reference_video_info=None):
+    if isinstance(reference_video_info, dict):
+        for key in ("loaded_fps", "source_fps"):
+            value = reference_video_info.get(key)
+            try:
+                fps = float(value)
+            except (TypeError, ValueError):
+                continue
+            if fps > 0:
+                return fps
+    return DEFAULT_REFERENCE_VIDEO_FPS
+
+
+def _format_duration_value(seconds):
+    value = float(seconds)
+    if value <= 0:
+        raise ValueError("duration must be greater than 0.")
+    if value.is_integer():
+        return str(int(value))
+    return f"{value:.3f}".rstrip("0").rstrip(".")
+
+
+def _resolve_motion_control_duration(
+        duration,
+        reference_video_input=None,
+        reference_video_frames=None,
+        reference_video_info=None,
+):
+    normalized = str(duration or "").strip() or "auto"
+    if normalized != "auto":
+        return normalized
+
+    if isinstance(reference_video_info, dict):
+        for key in ("loaded_duration", "source_duration"):
+            value = reference_video_info.get(key)
+            try:
+                return _format_duration_value(value)
+            except (TypeError, ValueError):
+                continue
+
+    if reference_video_input is not None and hasattr(reference_video_input, "get_duration"):
+        try:
+            return _format_duration_value(reference_video_input.get_duration())
+        except Exception:
+            pass
+
+    if reference_video_frames is not None:
+        frame_count = None
+        shape = getattr(reference_video_frames, "shape", None)
+        if shape and len(shape) > 0:
+            try:
+                frame_count = int(shape[0])
+            except Exception:
+                frame_count = None
+        if frame_count is None:
+            try:
+                frame_count = len(reference_video_frames)
+            except Exception:
+                frame_count = None
+        if frame_count and frame_count > 0:
+            fps = _resolve_reference_video_fps(reference_video_info)
+            return _format_duration_value(frame_count / fps)
+
+    raise ValueError(
+        "duration='auto' requires reference_video_input or reference_video_frames with usable duration metadata."
+    )
+
+
+def _encode_reference_video_frames_to_mp4(reference_video_frames, reference_video_info=None):
+    images = _tensor2images(reference_video_frames)
+    if not images:
+        raise ValueError("reference_video_frames must contain at least one frame.")
+
+    first_frame = images[0].convert("RGB")
+    width, height = first_frame.size
+    fps = _resolve_reference_video_fps(reference_video_info)
+
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as handle:
+        temp_path = handle.name
+
+    ffmpeg_path = _find_ffmpeg_path()
+    command = [
+        ffmpeg_path,
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        f"{fps:.6f}",
+        "-i",
+        "-",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        temp_path,
+    ]
+
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+
+    try:
+        for frame in images:
+            rgb_frame = frame.convert("RGB")
+            if rgb_frame.size != (width, height):
+                raise ValueError("reference_video_frames must all have the same size.")
+            process.stdin.write(rgb_frame.tobytes())
+        process.stdin.close()
+        stderr = process.stderr.read()
+        return_code = process.wait()
+    except Exception:
+        process.kill()
+        process.wait()
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise
+
+    if return_code != 0:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        error_message = stderr.decode("utf-8", errors="ignore").strip()
+        raise RuntimeError(f"Failed to encode reference_video_frames with ffmpeg: {error_message or return_code}")
+
+    return temp_path
+
+
+def _upload_reference_video_frames(reference_video_frames, reference_video_info=None):
+    temp_path = _encode_reference_video_frames_to_mp4(reference_video_frames, reference_video_info)
+    try:
+        return _upload_file_to_tmpfiles(temp_path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def _resolve_motion_control_reference_video(
+        reference_video,
+        reference_video_input=None,
+        reference_video_frames=None,
+        reference_video_info=None,
+):
+    if reference_video_input is not None:
+        return _upload_video_reference(reference_video_input)
+
+    if reference_video_frames is not None:
+        return _upload_reference_video_frames(reference_video_frames, reference_video_info)
+
+    if isinstance(reference_video, str) and reference_video.strip():
+        raise ValueError(
+            "Direct reference_video URLs are no longer supported for motion control. "
+            "Use reference_video_input or reference_video_frames instead."
+        )
+
+    return ""
 
 
 class ImageGeneratorNode:
@@ -1951,15 +2228,19 @@ class MotionControlNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model_name": ("STRING", {"multiline": False, "default": "kling-v2-6"}),
+                "model_name": (MOTION_CONTROL_MODELS, {"default": "kling-v2-6"}),
                 "reference_image": ("IMAGE",),
-                "reference_video": ("STRING", {"multiline": False, "default": ""}),
             },
             "optional": {
+                "reference_video_input": ("VIDEO",),
+                "reference_video_frames": ("IMAGE",),
+                "reference_video_info": ("VHS_VIDEOINFO",),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
                 "mode": (DEFAULT_MODES,),
-                "duration": ("STRING", {"multiline": False, "default": "5"}),
+                "duration": (MOTION_CONTROL_DURATIONS, {"default": "auto"}),
+                "character_orientation": (["video", "image"], {"default": "video"}),
+                "keep_original_sound": ("BOOLEAN", {"default": True}),
                 "element_list": (ELEMENT_LIST_TYPE,),
                 "extra_payload_json": ("STRING", {"multiline": True, "default": ""}),
             }
@@ -1975,18 +2256,36 @@ class MotionControlNode:
             self,
             model_name,
             reference_image,
-            reference_video,
+            reference_video="",
             prompt="",
             negative_prompt="",
             mode="std",
-            duration="5",
+            duration="auto",
+            character_orientation="video",
+            keep_original_sound=True,
             element_list=None,
             extra_payload_json="",
+            reference_video_input=None,
+            reference_video_frames=None,
+            reference_video_info=None,
     ):
         model_name = (model_name or "kling-v2-6").strip() or "kling-v2-6"
-        reference_video = reference_video.strip()
+        reference_video = _resolve_motion_control_reference_video(
+            reference_video,
+            reference_video_input=reference_video_input,
+            reference_video_frames=reference_video_frames,
+            reference_video_info=reference_video_info,
+        )
         if not reference_video:
-            raise ValueError("reference_video is required for motion control.")
+            raise ValueError(
+                "reference_video_input or reference_video_frames is required for motion control."
+            )
+        duration = _resolve_motion_control_duration(
+            duration,
+            reference_video_input=reference_video_input,
+            reference_video_frames=reference_video_frames,
+            reference_video_info=reference_video_info,
+        )
 
         normalized_element_list = _normalize_element_list(element_list)
         extra_payload = _parse_json_input(extra_payload_json, "extra_payload_json")
@@ -1999,8 +2298,10 @@ class MotionControlNode:
         generator.negative_prompt = negative_prompt
         generator.mode = mode
         generator.duration = duration
-        generator.reference_image = _image_to_base64(reference_image)
-        generator.reference_video = reference_video
+        generator.image_url = _upload_image_reference(reference_image)
+        generator.video_url = reference_video
+        generator.character_orientation = character_orientation
+        generator.keep_original_sound = "yes" if keep_original_sound else "no"
 
         if normalized_element_list:
             generator.element_list = normalized_element_list
