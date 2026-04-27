@@ -138,11 +138,12 @@ class BackendConfigTests(unittest.TestCase):
                     return_value=(str(tmpdir_path), "Comfyui-Kling-Wrapper", 1, "", None),
                 ):
                     with mock.patch.object(kling_nodes, "_fetch_image", return_value=b"video-bytes"):
-                        result = kling_nodes.PreviewVideo().run(
-                            "https://example.com/video.mp4",
-                            "Comfyui-Kling-Wrapper",
-                            True,
-                        )
+                        with mock.patch.object(kling_nodes, "_register_output_asset"):
+                            result = kling_nodes.PreviewVideo().run(
+                                "https://example.com/video.mp4",
+                                "Comfyui-Kling-Wrapper",
+                                True,
+                            )
 
         self.assertEqual(
             result["ui"]["video_url"],
@@ -152,6 +153,46 @@ class BackendConfigTests(unittest.TestCase):
             result["ui"]["images"][0]["filename"],
             "Comfyui-Kling-Wrapper_00001_.mp4",
         )
+
+    def test_preview_video_registers_saved_file_as_asset(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            with mock.patch.object(kling_nodes.folder_paths, "get_output_directory", return_value=str(tmpdir_path)):
+                with mock.patch.object(
+                    kling_nodes.folder_paths,
+                    "get_save_image_path",
+                    return_value=(str(tmpdir_path), "Comfyui-Kling-Wrapper", 1, "", None),
+                ):
+                    with mock.patch.object(kling_nodes, "_fetch_image", return_value=b"video-bytes"):
+                        with mock.patch.object(kling_nodes, "_register_output_asset") as register_mock:
+                            result = kling_nodes.PreviewVideo().run(
+                                "https://example.com/video.mp4",
+                                "Comfyui-Kling-Wrapper",
+                                True,
+                            )
+
+        register_mock.assert_called_once_with(result["result"][0])
+
+    def test_preview_video_keeps_result_when_asset_registration_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            with mock.patch.object(kling_nodes.folder_paths, "get_output_directory", return_value=str(tmpdir_path)):
+                with mock.patch.object(
+                    kling_nodes.folder_paths,
+                    "get_save_image_path",
+                    return_value=(str(tmpdir_path), "Comfyui-Kling-Wrapper", 1, "", None),
+                ):
+                    with mock.patch.object(kling_nodes, "_fetch_image", return_value=b"video-bytes"):
+                        with mock.patch.object(kling_nodes, "_register_output_asset", side_effect=RuntimeError("boom")):
+                            result = kling_nodes.PreviewVideo().run(
+                                "https://example.com/video.mp4",
+                                "Comfyui-Kling-Wrapper",
+                                True,
+                            )
+
+                            self.assertTrue(Path(result["result"][0]).is_file())
 
     def test_preview_video_rejects_empty_video_url(self):
         with self.assertRaisesRegex(

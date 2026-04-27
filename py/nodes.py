@@ -692,6 +692,18 @@ def _saved_result(filename, subfolder, folder_type):
     }
 
 
+def _register_output_asset(file_path):
+    try:
+        import app.assets.services.ingest as asset_ingest
+    except Exception:
+        return
+
+    try:
+        asset_ingest.ingest_existing_file(file_path)
+    except Exception as e:
+        print(f"[PreviewVideo] Failed to register output asset: {e}")
+
+
 def _build_local_media_view_url(filename, subfolder, folder_type):
     query = [
         f"type={urllib.parse.quote(str(folder_type), safe='')}",
@@ -1548,6 +1560,10 @@ class PreviewVideo:
             )
         with open(file_path, "wb") as handle:
             handle.write(_fetch_image(video_url))
+        try:
+            _register_output_asset(file_path)
+        except Exception as e:
+            print(f"[PreviewVideo] Failed to register output asset: {e}")
 
         return {
             "ui": {
