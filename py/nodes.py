@@ -34,6 +34,7 @@ LEGACY_CONFIG_PATH = ROOT_DIR / "config.ini"
 LEGACY_CONFIG_SECTION = "API"
 
 DEFAULT_FILENAME_PREFIX = NODE_PREFIX
+DEFAULT_VIDEO_FILENAME_PREFIX = "video/timeline"
 DEFAULT_REQUEST_TIMEOUT = 30
 DEFAULT_POLL_INTERVAL = 1.0
 DEFAULT_UPLOAD_TIMEOUT = 120
@@ -1526,7 +1527,6 @@ class PreviewVideo:
         return {
             "required": {
                 "video_url": ("STRING", {"forceInput": True}),
-                "filename_prefix": ("STRING", {"default": DEFAULT_FILENAME_PREFIX}),
             }
         }
 
@@ -1537,7 +1537,7 @@ class PreviewVideo:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("file_path",)
 
-    def run(self, video_url, filename_prefix, save_output=True):
+    def run(self, video_url, filename_prefix=DEFAULT_VIDEO_FILENAME_PREFIX, save_output=True):
         if not save_output:
             return {"ui": {"video_url": [video_url]}, "result": ('',)}
 

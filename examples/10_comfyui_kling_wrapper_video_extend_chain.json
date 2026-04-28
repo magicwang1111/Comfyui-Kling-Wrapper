@@ -130,9 +130,7 @@
       "properties": {
         "Node name for S&R": "Comfyui-Kling-Wrapper Preview Video"
       },
-      "widgets_values": [
-        "Comfyui-Kling-Wrapper"
-      ]
+      "widgets_values": []
     }
   ],
   "links": [

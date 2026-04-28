@@ -135,28 +135,30 @@ class BackendConfigTests(unittest.TestCase):
                 with mock.patch.object(
                     kling_nodes.folder_paths,
                     "get_save_image_path",
-                    return_value=(str(tmpdir_path), "Comfyui-Kling-Wrapper", 1, "", None),
-                ):
+                    return_value=(str(tmpdir_path), "timeline", 1, "video", None),
+                ) as save_path_mock:
                     with mock.patch.object(kling_nodes, "_fetch_image", return_value=b"video-bytes"):
                         with mock.patch.object(kling_nodes, "_register_output_asset"):
                             result = kling_nodes.PreviewVideo().run(
                                 "https://example.com/video.mp4",
-                                "Comfyui-Kling-Wrapper",
                             )
 
+        save_path_mock.assert_called_once_with(kling_nodes.DEFAULT_VIDEO_FILENAME_PREFIX, str(tmpdir_path))
         self.assertEqual(
             result["ui"]["video_url"],
-            ["/api/view?type=output&filename=Comfyui-Kling-Wrapper_00001_.mp4"],
+            ["/api/view?type=output&filename=timeline_00001_.mp4&subfolder=video"],
         )
         self.assertEqual(
             result["ui"]["images"][0]["filename"],
-            "Comfyui-Kling-Wrapper_00001_.mp4",
+            "timeline_00001_.mp4",
         )
+        self.assertEqual(result["ui"]["images"][0]["subfolder"], "video")
 
-    def test_preview_video_save_output_is_not_user_toggleable(self):
+    def test_preview_video_filename_controls_are_not_user_toggleable(self):
         required = kling_nodes.PreviewVideo.INPUT_TYPES()["required"]
 
         self.assertNotIn("save_output", required)
+        self.assertNotIn("filename_prefix", required)
 
     def test_preview_video_registers_saved_file_as_asset(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -166,13 +168,12 @@ class BackendConfigTests(unittest.TestCase):
                 with mock.patch.object(
                     kling_nodes.folder_paths,
                     "get_save_image_path",
-                    return_value=(str(tmpdir_path), "Comfyui-Kling-Wrapper", 1, "", None),
+                    return_value=(str(tmpdir_path), "timeline", 1, "video", None),
                 ):
                     with mock.patch.object(kling_nodes, "_fetch_image", return_value=b"video-bytes"):
                         with mock.patch.object(kling_nodes, "_register_output_asset") as register_mock:
                             result = kling_nodes.PreviewVideo().run(
                                 "https://example.com/video.mp4",
-                                "Comfyui-Kling-Wrapper",
                             )
 
         register_mock.assert_called_once_with(result["result"][0])
@@ -228,13 +229,12 @@ class BackendConfigTests(unittest.TestCase):
                 with mock.patch.object(
                     kling_nodes.folder_paths,
                     "get_save_image_path",
-                    return_value=(str(tmpdir_path), "Comfyui-Kling-Wrapper", 1, "", None),
+                    return_value=(str(tmpdir_path), "timeline", 1, "video", None),
                 ):
                     with mock.patch.object(kling_nodes, "_fetch_image", return_value=b"video-bytes"):
                         with mock.patch.object(kling_nodes, "_register_output_asset", side_effect=RuntimeError("boom")):
                             result = kling_nodes.PreviewVideo().run(
                                 "https://example.com/video.mp4",
-                                "Comfyui-Kling-Wrapper",
                             )
 
                             self.assertTrue(Path(result["result"][0]).is_file())
@@ -244,7 +244,7 @@ class BackendConfigTests(unittest.TestCase):
             ValueError,
             "empty video_url",
         ):
-            kling_nodes.PreviewVideo().run("", "Comfyui-Kling-Wrapper")
+            kling_nodes.PreviewVideo().run("")
 
     def test_upload_file_to_tmpfiles_retries_transient_ssl_error(self):
         with tempfile.TemporaryDirectory() as tmpdir:
