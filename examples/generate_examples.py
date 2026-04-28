@@ -170,7 +170,7 @@ def preview_video_node(node_id, pos, order, link_id):
         pos,
         [430, 820],
         order,
-        [NODE_PREFIX, True],
+        [NODE_PREFIX],
         inputs=[input_slot("video_url", "STRING", link_id)],
         outputs=[output_slot("file_path", "STRING", slot_index=0)],
     )

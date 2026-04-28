@@ -1523,7 +1523,6 @@ class PreviewVideo:
             "required": {
                 "video_url": ("STRING", {"forceInput": True}),
                 "filename_prefix": ("STRING", {"default": DEFAULT_FILENAME_PREFIX}),
-                "save_output": ("BOOLEAN", {"default": True}),
             }
         }
 
@@ -1534,7 +1533,7 @@ class PreviewVideo:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("file_path",)
 
-    def run(self, video_url, filename_prefix, save_output):
+    def run(self, video_url, filename_prefix, save_output=True):
         if not save_output:
             return {"ui": {"video_url": [video_url]}, "result": ('',)}
 

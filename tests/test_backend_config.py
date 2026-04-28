@@ -142,7 +142,6 @@ class BackendConfigTests(unittest.TestCase):
                             result = kling_nodes.PreviewVideo().run(
                                 "https://example.com/video.mp4",
                                 "Comfyui-Kling-Wrapper",
-                                True,
                             )
 
         self.assertEqual(
@@ -153,6 +152,11 @@ class BackendConfigTests(unittest.TestCase):
             result["ui"]["images"][0]["filename"],
             "Comfyui-Kling-Wrapper_00001_.mp4",
         )
+
+    def test_preview_video_save_output_is_not_user_toggleable(self):
+        required = kling_nodes.PreviewVideo.INPUT_TYPES()["required"]
+
+        self.assertNotIn("save_output", required)
 
     def test_preview_video_registers_saved_file_as_asset(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -169,7 +173,6 @@ class BackendConfigTests(unittest.TestCase):
                             result = kling_nodes.PreviewVideo().run(
                                 "https://example.com/video.mp4",
                                 "Comfyui-Kling-Wrapper",
-                                True,
                             )
 
         register_mock.assert_called_once_with(result["result"][0])
@@ -189,7 +192,6 @@ class BackendConfigTests(unittest.TestCase):
                             result = kling_nodes.PreviewVideo().run(
                                 "https://example.com/video.mp4",
                                 "Comfyui-Kling-Wrapper",
-                                True,
                             )
 
                             self.assertTrue(Path(result["result"][0]).is_file())
@@ -199,7 +201,7 @@ class BackendConfigTests(unittest.TestCase):
             ValueError,
             "empty video_url",
         ):
-            kling_nodes.PreviewVideo().run("", "Comfyui-Kling-Wrapper", True)
+            kling_nodes.PreviewVideo().run("", "Comfyui-Kling-Wrapper")
 
     def test_upload_file_to_tmpfiles_retries_transient_ssl_error(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -170,8 +170,7 @@
         "Node name for S&R": "Comfyui-Kling-Wrapper Preview Video"
       },
       "widgets_values": [
-        "Comfyui-Kling-Wrapper",
-        true
+        "Comfyui-Kling-Wrapper"
       ]
     }
   ],
