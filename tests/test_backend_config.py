@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest import mock
 
 import httpx
@@ -176,6 +176,24 @@ class BackendConfigTests(unittest.TestCase):
                             )
 
         register_mock.assert_called_once_with(result["result"][0])
+
+    def test_preview_video_skips_missing_asset_ingest_function(self):
+        fake_app_module = ModuleType("app")
+        fake_assets_module = ModuleType("app.assets")
+        fake_services_module = ModuleType("app.assets.services")
+        fake_ingest_module = ModuleType("app.assets.services.ingest")
+        fake_ingest_module.ingest_existing_file = None
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "app": fake_app_module,
+                "app.assets": fake_assets_module,
+                "app.assets.services": fake_services_module,
+                "app.assets.services.ingest": fake_ingest_module,
+            },
+        ):
+            kling_nodes._register_output_asset("example.mp4")
 
     def test_preview_video_keeps_result_when_asset_registration_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -698,8 +698,12 @@ def _register_output_asset(file_path):
     except Exception:
         return
 
+    ingest_existing_file = getattr(asset_ingest, "ingest_existing_file", None)
+    if not callable(ingest_existing_file):
+        return
+
     try:
-        asset_ingest.ingest_existing_file(file_path)
+        ingest_existing_file(file_path)
     except Exception as e:
         print(f"[PreviewVideo] Failed to register output asset: {e}")
 
