@@ -195,6 +195,31 @@ class BackendConfigTests(unittest.TestCase):
         ):
             kling_nodes._register_output_asset("example.mp4")
 
+    def test_preview_video_silences_broken_asset_ingest_function(self):
+        fake_app_module = ModuleType("app")
+        fake_assets_module = ModuleType("app.assets")
+        fake_services_module = ModuleType("app.assets.services")
+        fake_ingest_module = ModuleType("app.assets.services.ingest")
+
+        def broken_ingest(_file_path):
+            raise TypeError("'NoneType' object is not callable")
+
+        fake_ingest_module.ingest_existing_file = broken_ingest
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "app": fake_app_module,
+                "app.assets": fake_assets_module,
+                "app.assets.services": fake_services_module,
+                "app.assets.services.ingest": fake_ingest_module,
+            },
+        ):
+            with mock.patch("builtins.print") as print_mock:
+                kling_nodes._register_output_asset("example.mp4")
+
+        print_mock.assert_not_called()
+
     def test_preview_video_keeps_result_when_asset_registration_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)

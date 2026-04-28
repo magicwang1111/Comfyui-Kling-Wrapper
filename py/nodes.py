@@ -704,8 +704,8 @@ def _register_output_asset(file_path):
 
     try:
         ingest_existing_file(file_path)
-    except Exception as e:
-        print(f"[PreviewVideo] Failed to register output asset: {e}")
+    except Exception:
+        return
 
 
 def _build_local_media_view_url(filename, subfolder, folder_type):
@@ -1565,8 +1565,8 @@ class PreviewVideo:
             handle.write(_fetch_image(video_url))
         try:
             _register_output_asset(file_path)
-        except Exception as e:
-            print(f"[PreviewVideo] Failed to register output asset: {e}")
+        except Exception:
+            pass
 
         return {
             "ui": {
