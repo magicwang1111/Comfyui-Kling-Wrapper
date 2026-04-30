@@ -3,5 +3,11 @@
   "secret_key": "",
   "poll_interval": 1.0,
   "request_timeout": 30,
-  "area": "china"
+  "area": "china",
+  "oss_endpoint": "",
+  "oss_access_key_id": "",
+  "oss_access_key_secret": "",
+  "oss_bucket": "",
+  "oss_prefix": "kling_uploads",
+  "oss_signed_url_expires": 86400
 }

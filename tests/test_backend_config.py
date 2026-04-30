@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+import urllib.parse
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -33,6 +34,12 @@ ENV_KEYS = {
     "KLINGAI_AREA": "",
     "KLINGAI_POLL_INTERVAL": "",
     "KLINGAI_REQUEST_TIMEOUT": "",
+    "OSS_ENDPOINT": "",
+    "OSS_ACCESS_KEY_ID": "",
+    "OSS_ACCESS_KEY_SECRET": "",
+    "OSS_BUCKET": "",
+    "OSS_PREFIX": "",
+    "OSS_SIGNED_URL_EXPIRES": "",
 }
 
 
@@ -271,6 +278,70 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(url, "https://tmpfiles.org/dl/123/sample.mp4")
         self.assertEqual(post_mock.call_count, 2)
 
+    def test_upload_file_to_oss_returns_signed_download_url(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_path = Path(tmpdir) / "sample.mp4"
+            file_path.write_bytes(b"video-bytes")
+
+            ok_response = mock.Mock()
+            ok_response.raise_for_status.return_value = None
+            oss_config = {
+                "scheme": "https",
+                "endpoint_host": "oss-cn-hangzhou.aliyuncs.com",
+                "access_key_id": "access-key-id",
+                "access_key_secret": "access-key-secret",
+                "bucket": "example-bucket",
+                "prefix": "GouMei-Video-Cut",
+                "signed_url_expires": 3600,
+            }
+
+            with mock.patch.object(kling_nodes, "_build_oss_object_key", return_value="GouMei-Video-Cut/sample.mp4"):
+                with mock.patch.object(kling_nodes.time, "time", return_value=1000):
+                    with mock.patch.object(kling_nodes.requests, "put", return_value=ok_response) as put_mock:
+                        url = kling_nodes._upload_file_to_oss(file_path, oss_config=oss_config)
+
+        put_mock.assert_called_once()
+        self.assertEqual(
+            put_mock.call_args.args[0],
+            "https://example-bucket.oss-cn-hangzhou.aliyuncs.com/GouMei-Video-Cut/sample.mp4",
+        )
+        self.assertIn("Authorization", put_mock.call_args.kwargs["headers"])
+        self.assertTrue(put_mock.call_args.kwargs["headers"]["Authorization"].startswith("OSS access-key-id:"))
+
+        parsed_url = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(parsed_url.query)
+        self.assertEqual(parsed_url.scheme, "https")
+        self.assertEqual(parsed_url.netloc, "example-bucket.oss-cn-hangzhou.aliyuncs.com")
+        self.assertEqual(parsed_url.path, "/GouMei-Video-Cut/sample.mp4")
+        self.assertEqual(query["OSSAccessKeyId"], ["access-key-id"])
+        self.assertEqual(query["Expires"], ["4600"])
+        self.assertIn("Signature", query)
+
+    def test_oss_upload_config_reads_environment_variables(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "missing-config.local.json"
+            env_values = {
+                **ENV_KEYS,
+                "OSS_ENDPOINT": "oss-cn-hangzhou.aliyuncs.com",
+                "OSS_ACCESS_KEY_ID": "access-key-id",
+                "OSS_ACCESS_KEY_SECRET": "access-key-secret",
+                "OSS_BUCKET": "example-bucket",
+                "OSS_PREFIX": "GouMei-Video-Cut",
+                "OSS_SIGNED_URL_EXPIRES": "7200",
+            }
+
+            with mock.patch.dict(os.environ, env_values, clear=False):
+                with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                    config = kling_nodes._resolve_oss_upload_config()
+
+        self.assertEqual(config["scheme"], "https")
+        self.assertEqual(config["endpoint_host"], "oss-cn-hangzhou.aliyuncs.com")
+        self.assertEqual(config["access_key_id"], "access-key-id")
+        self.assertEqual(config["access_key_secret"], "access-key-secret")
+        self.assertEqual(config["bucket"], "example-bucket")
+        self.assertEqual(config["prefix"], "GouMei-Video-Cut")
+        self.assertEqual(config["signed_url_expires"], 7200)
+
     def test_temporary_media_upload_falls_back_to_catbox(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = Path(tmpdir) / "sample.mp4"
@@ -281,17 +352,18 @@ class BackendConfigTests(unittest.TestCase):
             catbox_response.text = "https://files.catbox.moe/sample.mp4"
 
             with mock.patch.object(kling_nodes.time, "sleep"):
-                with mock.patch.object(
-                    kling_nodes.requests,
-                    "post",
-                    side_effect=[
-                        requests.exceptions.ConnectionError("reset"),
-                        requests.exceptions.ConnectionError("reset"),
-                        requests.exceptions.ConnectionError("reset"),
-                        catbox_response,
-                    ],
-                ) as post_mock:
-                    url = kling_nodes._upload_file_to_temporary_media_host(file_path)
+                with mock.patch.object(kling_nodes, "_resolve_oss_upload_config", return_value=None):
+                    with mock.patch.object(
+                        kling_nodes.requests,
+                        "post",
+                        side_effect=[
+                            requests.exceptions.ConnectionError("reset"),
+                            requests.exceptions.ConnectionError("reset"),
+                            requests.exceptions.ConnectionError("reset"),
+                            catbox_response,
+                        ],
+                    ) as post_mock:
+                        url = kling_nodes._upload_file_to_temporary_media_host(file_path)
 
         self.assertEqual(url, "https://files.catbox.moe/sample.mp4")
         self.assertEqual(post_mock.call_count, 4)
@@ -315,7 +387,7 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(metadata["default"], "kling-v2-6")
         self.assertEqual(duration_options, kling_nodes.MOTION_CONTROL_DURATIONS)
         self.assertEqual(duration_metadata["default"], "auto")
-        self.assertNotIn("reference_video", input_types["optional"])
+        self.assertIn("reference_video", input_types["optional"])
 
     def test_motion_control_uploads_reference_video_frames(self):
         sentinel_client = object()
@@ -571,16 +643,47 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(first_client.request.call_count, 1)
         self.assertEqual(second_client.request.call_count, 1)
 
-    def test_motion_control_rejects_direct_reference_video_url(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            "Direct reference_video URLs are no longer supported",
-        ):
-            kling_nodes.MotionControlNode().generate(
-                model_name="kling-v2-6",
-                reference_image=object(),
-                reference_video="https://example.com/reference-motion.mp4",
-            )
+    def test_motion_control_accepts_direct_reference_video_url(self):
+        sentinel_client = object()
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        class FakeMotionControl:
+            last_instance = None
+
+            def __init__(self):
+                FakeMotionControl.last_instance = self
+
+            def run(self, client):
+                self.seen_client = client
+                return SimpleNamespace(
+                    final_unit_deduction=1.0,
+                    task_result=SimpleNamespace(
+                        videos=[SimpleNamespace(url="https://example.com/video.mp4", id="video-123")]
+                    ),
+                )
+
+        reference_video_url = "https://example.com/reference-motion.mp4"
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "MotionControl", FakeMotionControl):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_upload_image_reference",
+                    return_value="https://tmpfiles.org/dl/img/ref.png",
+                ):
+                    url, video_id = kling_nodes.MotionControlNode().generate(
+                        model_name="kling-v2-6",
+                        reference_image=object(),
+                        reference_video=reference_video_url,
+                        duration="5",
+                    )
+
+        self.assertEqual(url, "https://example.com/video.mp4")
+        self.assertEqual(video_id, "video-123")
+        self.assertEqual(FakeMotionControl.last_instance.video_url, reference_video_url)
+        self.assertIs(FakeMotionControl.last_instance.seen_client, sentinel_client)
 
     def test_motion_control_auto_duration_requires_video_timing(self):
         with self.assertRaisesRegex(

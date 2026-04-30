@@ -10,8 +10,12 @@ from .api.exceptions import KLingAPIError
 import base64
 import configparser
 from contextlib import contextmanager
+import email.utils
+import hashlib
+import hmac
 import io
 import json
+import mimetypes
 import os
 import re
 import shutil
@@ -26,6 +30,7 @@ import folder_paths
 from comfy_extras.nodes_audio import LoadAudio
 import time
 import urllib.parse
+import uuid
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -48,6 +53,7 @@ CATBOX_UPLOAD_API_URL = "https://catbox.moe/user/api.php"
 TMPFILES_MAX_SIZE_BYTES = 100 * 1024 * 1024
 TMPFILES_UPLOAD_RETRY_COUNT = 3
 TMPFILES_UPLOAD_RETRY_DELAY = 1.0
+LOCAL_MEDIA_UPLOAD_SUBFOLDER = "kling_uploads"
 DEFAULT_REFERENCE_VIDEO_FPS = 24.0
 LIPSYNC_AUDIO_TYPES = {
     "阳光少年": "genshin_vindi2",
@@ -763,6 +769,209 @@ def _normalize_catbox_upload_url(raw_url):
     return normalized
 
 
+def _is_http_url(value):
+    parsed = urllib.parse.urlparse(str(value or "").strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _config_or_env_value(config_data, json_key, env_key, default=""):
+    if _json_value_present(config_data, json_key):
+        return str(config_data[json_key]).strip()
+
+    env_value = _load_env_value(env_key)
+    if env_value:
+        return env_value
+
+    return default
+
+
+def _normalize_oss_endpoint(endpoint):
+    raw_endpoint = str(endpoint or "").strip().rstrip("/")
+    if not raw_endpoint:
+        raise ValueError("oss_endpoint is required.")
+
+    if "://" not in raw_endpoint:
+        raw_endpoint = f"https://{raw_endpoint}"
+
+    parsed = urllib.parse.urlparse(raw_endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("oss_endpoint must be a valid OSS endpoint host or URL.")
+    if parsed.path not in {"", "/"}:
+        raise ValueError("oss_endpoint must not include a path.")
+
+    return parsed.scheme, parsed.netloc
+
+
+def _normalize_oss_prefix(prefix):
+    normalized = str(prefix or "").strip().strip("/")
+    return normalized or LOCAL_MEDIA_UPLOAD_SUBFOLDER
+
+
+def _parse_oss_signed_url_expires(value):
+    if value in (None, ""):
+        return 24 * 60 * 60
+
+    try:
+        expires = int(str(value).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError("oss_signed_url_expires must be an integer number of seconds.") from exc
+
+    if expires <= 0:
+        raise ValueError("oss_signed_url_expires must be greater than 0.")
+
+    return expires
+
+
+def _resolve_oss_upload_config():
+    config_data = _load_json_config()
+    endpoint = _config_or_env_value(config_data, "oss_endpoint", "OSS_ENDPOINT")
+    access_key_id = _config_or_env_value(config_data, "oss_access_key_id", "OSS_ACCESS_KEY_ID")
+    access_key_secret = _config_or_env_value(config_data, "oss_access_key_secret", "OSS_ACCESS_KEY_SECRET")
+    bucket = _config_or_env_value(config_data, "oss_bucket", "OSS_BUCKET")
+    prefix = _config_or_env_value(config_data, "oss_prefix", "OSS_PREFIX", LOCAL_MEDIA_UPLOAD_SUBFOLDER)
+    signed_url_expires = _config_or_env_value(
+        config_data,
+        "oss_signed_url_expires",
+        "OSS_SIGNED_URL_EXPIRES",
+        24 * 60 * 60,
+    )
+
+    required_values = {
+        "oss_endpoint": endpoint,
+        "oss_access_key_id": access_key_id,
+        "oss_access_key_secret": access_key_secret,
+        "oss_bucket": bucket,
+    }
+    present_count = sum(1 for value in required_values.values() if value)
+    if present_count == 0:
+        return None
+
+    missing_keys = [key for key, value in required_values.items() if not value]
+    if missing_keys:
+        raise ValueError(
+            "OSS upload config is incomplete; set "
+            + ", ".join(missing_keys)
+            + " in config.local.json or environment variables."
+        )
+
+    scheme, endpoint_host = _normalize_oss_endpoint(endpoint)
+    return {
+        "scheme": scheme,
+        "endpoint_host": endpoint_host,
+        "access_key_id": access_key_id,
+        "access_key_secret": access_key_secret,
+        "bucket": str(bucket).strip(),
+        "prefix": _normalize_oss_prefix(prefix),
+        "signed_url_expires": _parse_oss_signed_url_expires(signed_url_expires),
+    }
+
+
+def _oss_signature(access_key_secret, string_to_sign):
+    digest = hmac.new(
+        access_key_secret.encode("utf-8"),
+        string_to_sign.encode("utf-8"),
+        hashlib.sha1,
+    ).digest()
+    return base64.b64encode(digest).decode("utf-8")
+
+
+def _build_oss_object_key(file_path, prefix):
+    filename = os.path.basename(os.fspath(file_path))
+    safe_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._")
+    if not safe_filename:
+        safe_filename = "media"
+
+    date_folder = time.strftime("%Y%m%d", time.gmtime())
+    return f"{prefix}/{date_folder}/{uuid.uuid4().hex}-{safe_filename}"
+
+
+def _build_oss_url(oss_config, object_key, query=None):
+    quoted_key = urllib.parse.quote(object_key, safe="/")
+    base_url = (
+        f"{oss_config['scheme']}://{oss_config['bucket']}."
+        f"{oss_config['endpoint_host']}/{quoted_key}"
+    )
+    if not query:
+        return base_url
+
+    return base_url + "?" + urllib.parse.urlencode(query)
+
+
+def _build_oss_authorization_header(oss_config, method, object_key, content_type, date):
+    string_to_sign = (
+        f"{method}\n"
+        f"\n"
+        f"{content_type}\n"
+        f"{date}\n"
+        f"/{oss_config['bucket']}/{object_key}"
+    )
+    signature = _oss_signature(oss_config["access_key_secret"], string_to_sign)
+    return f"OSS {oss_config['access_key_id']}:{signature}"
+
+
+def _build_oss_signed_download_url(oss_config, object_key):
+    expires = int(time.time()) + int(oss_config["signed_url_expires"])
+    string_to_sign = f"GET\n\n\n{expires}\n/{oss_config['bucket']}/{object_key}"
+    signature = _oss_signature(oss_config["access_key_secret"], string_to_sign)
+    return _build_oss_url(
+        oss_config,
+        object_key,
+        {
+            "OSSAccessKeyId": oss_config["access_key_id"],
+            "Expires": str(expires),
+            "Signature": signature,
+        },
+    )
+
+
+def _upload_file_to_oss(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT, oss_config=None):
+    normalized_path = _resolve_upload_file_path(file_path)
+    oss_config = oss_config or _resolve_oss_upload_config()
+    if not oss_config:
+        raise ValueError("OSS upload config is not configured.")
+
+    object_key = _build_oss_object_key(normalized_path, oss_config["prefix"])
+    content_type = mimetypes.guess_type(normalized_path)[0] or "application/octet-stream"
+    upload_url = _build_oss_url(oss_config, object_key)
+
+    for attempt in range(1, TMPFILES_UPLOAD_RETRY_COUNT + 1):
+        try:
+            date = email.utils.formatdate(usegmt=True)
+            authorization = _build_oss_authorization_header(
+                oss_config,
+                "PUT",
+                object_key,
+                content_type,
+                date,
+            )
+            with open(normalized_path, "rb") as handle:
+                response = requests.put(
+                    upload_url,
+                    data=handle,
+                    headers={
+                        "Authorization": authorization,
+                        "Content-Type": content_type,
+                        "Date": date,
+                    },
+                    timeout=float(timeout),
+                )
+            response.raise_for_status()
+            return _build_oss_signed_download_url(oss_config, object_key)
+        except requests.RequestException as exc:
+            if attempt >= TMPFILES_UPLOAD_RETRY_COUNT:
+                raise ConnectionError(
+                    "OSS media upload failed after multiple attempts. "
+                    f"Check OSS endpoint, bucket permissions, and network access: {exc}"
+                ) from exc
+            print(
+                f"[{NODE_PREFIX}] OSS upload retry {attempt}/{TMPFILES_UPLOAD_RETRY_COUNT} "
+                f"after transient error: {exc}"
+            )
+            time.sleep(TMPFILES_UPLOAD_RETRY_DELAY)
+
+    raise ConnectionError("OSS media upload failed.")
+
+
 def _upload_file_to_tmpfiles(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT):
     normalized_path = _resolve_upload_file_path(file_path)
 
@@ -848,6 +1057,24 @@ def _upload_file_to_temporary_media_host(file_path, timeout=DEFAULT_UPLOAD_TIMEO
     file_size = os.path.getsize(normalized_path)
     failures = []
     uploaders = []
+
+    try:
+        oss_config = _resolve_oss_upload_config()
+    except Exception as exc:
+        oss_config = None
+        failures.append(f"aliyun OSS: {exc}")
+
+    if oss_config is not None:
+        uploaders.append(
+            (
+                "aliyun OSS",
+                lambda path, timeout=DEFAULT_UPLOAD_TIMEOUT, _oss_config=oss_config: _upload_file_to_oss(
+                    path,
+                    timeout=timeout,
+                    oss_config=_oss_config,
+                ),
+            )
+        )
 
     if file_size <= TMPFILES_MAX_SIZE_BYTES:
         uploaders.append(("tmpfiles.org", _upload_file_to_tmpfiles))
@@ -985,7 +1212,8 @@ def _resolve_motion_control_duration(
             return _format_duration_value(frame_count / fps)
 
     raise ValueError(
-        "duration='auto' requires reference_video_input or reference_video_frames with usable duration metadata."
+        "duration='auto' requires reference_video_input or reference_video_frames with usable duration metadata. "
+        "Set duration explicitly when using a direct reference_video URL."
     )
 
 
@@ -1079,10 +1307,10 @@ def _resolve_motion_control_reference_video(
         return _upload_reference_video_frames(reference_video_frames, reference_video_info)
 
     if isinstance(reference_video, str) and reference_video.strip():
-        raise ValueError(
-            "Direct reference_video URLs are no longer supported for motion control. "
-            "Use reference_video_input or reference_video_frames instead."
-        )
+        normalized = reference_video.strip()
+        if _is_http_url(normalized):
+            return normalized
+        raise ValueError("reference_video must be an http(s) URL when provided.")
 
     return ""
 
@@ -2401,6 +2629,7 @@ class MotionControlNode:
                 "reference_image": ("IMAGE",),
             },
             "optional": {
+                "reference_video": ("STRING", {"multiline": False, "default": ""}),
                 "reference_video_input": ("VIDEO",),
                 "reference_video_frames": ("IMAGE",),
                 "reference_video_info": ("VHS_VIDEOINFO",),
@@ -2447,7 +2676,7 @@ class MotionControlNode:
         )
         if not reference_video:
             raise ValueError(
-                "reference_video_input or reference_video_frames is required for motion control."
+                "reference_video, reference_video_input, or reference_video_frames is required for motion control."
             )
         duration = _resolve_motion_control_duration(
             duration,

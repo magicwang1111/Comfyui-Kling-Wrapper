@@ -106,7 +106,13 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
      "secret_key": "",
      "poll_interval": 1.0,
      "request_timeout": 30,
-     "area": "global"
+     "area": "global",
+     "oss_endpoint": "",
+     "oss_access_key_id": "",
+     "oss_access_key_secret": "",
+     "oss_bucket": "",
+     "oss_prefix": "kling_uploads",
+     "oss_signed_url_expires": 86400
    }
    ```
 
@@ -146,10 +152,9 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 
 - `reference_video_input`: connect a node that outputs `VIDEO`
 - `reference_video_frames` + `reference_video_info`: connect an uploaded video loader that outputs decoded frames plus timing metadata
+- `reference_video`: pass an existing public http(s) video URL directly
 
-Direct reference-video URLs are no longer supported in this node.
-
-Reference images and videos are uploaded to a public temporary media host before Kling reads them. The wrapper tries `tmpfiles.org` first and automatically falls back to `catbox.moe` if that upload service resets the connection.
+Reference images and local reference videos must be reachable by Kling before generation starts. If OSS settings are present in `config.local.json` or environment variables (`OSS_ENDPOINT`, `OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, `OSS_BUCKET`, `OSS_PREFIX`), the wrapper uploads media to Aliyun OSS first and sends Kling a signed temporary download URL. Without OSS, it falls back to public temporary hosts: `tmpfiles.org`, then `catbox.moe`.
 
 The visible `model_name` dropdown for motion control is:
 

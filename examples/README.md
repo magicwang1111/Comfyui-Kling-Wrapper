@@ -15,7 +15,7 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `05_comfyui_kling_wrapper_text2video_v26_sound.json` is the native audio example and is built around `kling-v2-6`.
 - `06_comfyui_kling_wrapper_advanced_element_subject_to_image2video.json` requires 1 frontal portrait plus 1-3 additional photos of the same subject. Background or scene images do not count as advanced-element reference images.
 - If you need both subject binding and speech, generate the bound video first and then add speech with the lip-sync or audio nodes.
-- `Motion Control` now expects uploaded/local video workflow inputs rather than a direct reference-video URL. Use a video loader node that provides either `VIDEO` or `reference_video_frames` plus `reference_video_info`. Set `duration` to `auto` if you want it to match the uploaded motion reference length.
+- `Motion Control` accepts either a direct http(s) reference-video URL or uploaded/local video workflow inputs. For local media, use a video loader node that provides either `VIDEO` or `reference_video_frames` plus `reference_video_info`. Set `duration` to `auto` if you want it to match the uploaded motion reference length.
 
 ## Included files
 
