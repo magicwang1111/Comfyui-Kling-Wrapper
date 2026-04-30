@@ -271,6 +271,40 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(url, "https://tmpfiles.org/dl/123/sample.mp4")
         self.assertEqual(post_mock.call_count, 2)
 
+    def test_temporary_media_upload_falls_back_to_catbox(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_path = Path(tmpdir) / "sample.mp4"
+            file_path.write_bytes(b"video-bytes")
+
+            catbox_response = mock.Mock()
+            catbox_response.raise_for_status.return_value = None
+            catbox_response.text = "https://files.catbox.moe/sample.mp4"
+
+            with mock.patch.object(kling_nodes.time, "sleep"):
+                with mock.patch.object(
+                    kling_nodes.requests,
+                    "post",
+                    side_effect=[
+                        requests.exceptions.ConnectionError("reset"),
+                        requests.exceptions.ConnectionError("reset"),
+                        requests.exceptions.ConnectionError("reset"),
+                        catbox_response,
+                    ],
+                ) as post_mock:
+                    url = kling_nodes._upload_file_to_temporary_media_host(file_path)
+
+        self.assertEqual(url, "https://files.catbox.moe/sample.mp4")
+        self.assertEqual(post_mock.call_count, 4)
+        self.assertEqual(
+            [call.args[0] for call in post_mock.call_args_list],
+            [
+                kling_nodes.TMPFILES_UPLOAD_API_URL,
+                kling_nodes.TMPFILES_UPLOAD_API_URL,
+                kling_nodes.TMPFILES_UPLOAD_API_URL,
+                kling_nodes.CATBOX_UPLOAD_API_URL,
+            ],
+        )
+
     def test_motion_control_exposes_model_dropdown(self):
         input_types = kling_nodes.MotionControlNode.INPUT_TYPES()
         required = input_types["required"]

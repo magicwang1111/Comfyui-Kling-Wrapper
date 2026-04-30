@@ -149,6 +149,8 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 
 Direct reference-video URLs are no longer supported in this node.
 
+Reference images and videos are uploaded to a public temporary media host before Kling reads them. The wrapper tries `tmpfiles.org` first and automatically falls back to `catbox.moe` if that upload service resets the connection.
+
 The visible `model_name` dropdown for motion control is:
 
 - `kling-v2-6`

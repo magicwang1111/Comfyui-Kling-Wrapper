@@ -44,6 +44,7 @@ CAMERA_CONTROL_CONFIGS = ["horizontal", "vertical", "pan", "tilt", "roll", "zoom
 MOTION_CONTROL_MODELS = ["kling-v2-6", "kling-v3"]
 MOTION_CONTROL_DURATIONS = ["auto", "3", "5", "10", "15", "30"]
 TMPFILES_UPLOAD_API_URL = "https://tmpfiles.org/api/v1/upload"
+CATBOX_UPLOAD_API_URL = "https://catbox.moe/user/api.php"
 TMPFILES_MAX_SIZE_BYTES = 100 * 1024 * 1024
 TMPFILES_UPLOAD_RETRY_COUNT = 3
 TMPFILES_UPLOAD_RETRY_DELAY = 1.0
@@ -738,10 +739,32 @@ def _normalize_tmpfiles_download_url(page_url):
     return f"https://tmpfiles.org/dl/{path}"
 
 
-def _upload_file_to_tmpfiles(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT):
+def _resolve_upload_file_path(file_path):
     normalized_path = os.path.abspath(os.fspath(file_path))
     if not os.path.exists(normalized_path):
         raise ValueError(f"Upload file does not exist: {normalized_path}")
+    if not os.path.isfile(normalized_path):
+        raise ValueError(f"Upload path is not a file: {normalized_path}")
+
+    return normalized_path
+
+
+def _normalize_catbox_upload_url(raw_url):
+    normalized = str(raw_url or "").strip()
+    if not normalized:
+        raise ValueError("catbox.moe upload did not return a file URL.")
+    if normalized.upper().startswith("ERROR"):
+        raise ValueError(f"catbox.moe upload failed: {normalized}")
+
+    parsed = urllib.parse.urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"catbox.moe upload returned an invalid URL: {normalized}")
+
+    return normalized
+
+
+def _upload_file_to_tmpfiles(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT):
+    normalized_path = _resolve_upload_file_path(file_path)
 
     file_size = os.path.getsize(normalized_path)
     if file_size > TMPFILES_MAX_SIZE_BYTES:
@@ -786,6 +809,69 @@ def _upload_file_to_tmpfiles(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT):
     return _normalize_tmpfiles_download_url(page_url)
 
 
+def _upload_file_to_catbox(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT):
+    normalized_path = _resolve_upload_file_path(file_path)
+
+    filename = os.path.basename(normalized_path)
+    for attempt in range(1, TMPFILES_UPLOAD_RETRY_COUNT + 1):
+        try:
+            with open(normalized_path, "rb") as handle:
+                response = requests.post(
+                    CATBOX_UPLOAD_API_URL,
+                    data={"reqtype": "fileupload"},
+                    files={"fileToUpload": (filename, handle)},
+                    timeout=float(timeout),
+                )
+            break
+        except requests.RequestException as exc:
+            if attempt >= TMPFILES_UPLOAD_RETRY_COUNT:
+                raise ConnectionError(
+                    "Temporary media upload failed after multiple attempts. "
+                    f"catbox.moe may be temporarily unavailable: {exc}"
+                ) from exc
+            print(
+                f"[{NODE_PREFIX}] catbox upload retry {attempt}/{TMPFILES_UPLOAD_RETRY_COUNT} "
+                f"after transient error: {exc}"
+            )
+            time.sleep(TMPFILES_UPLOAD_RETRY_DELAY)
+
+    try:
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise ConnectionError(f"Temporary media upload failed: {exc}") from exc
+
+    return _normalize_catbox_upload_url(response.text)
+
+
+def _upload_file_to_temporary_media_host(file_path, timeout=DEFAULT_UPLOAD_TIMEOUT):
+    normalized_path = _resolve_upload_file_path(file_path)
+    file_size = os.path.getsize(normalized_path)
+    failures = []
+    uploaders = []
+
+    if file_size <= TMPFILES_MAX_SIZE_BYTES:
+        uploaders.append(("tmpfiles.org", _upload_file_to_tmpfiles))
+    else:
+        failures.append("tmpfiles.org: skipped because the file exceeds the 100 MB upload limit")
+
+    uploaders.append(("catbox.moe", _upload_file_to_catbox))
+
+    for service_name, uploader in uploaders:
+        try:
+            url = uploader(normalized_path, timeout=timeout)
+            if failures:
+                print(f"[{NODE_PREFIX}] temporary media upload succeeded via {service_name}.")
+            return url
+        except Exception as exc:
+            failures.append(f"{service_name}: {exc}")
+            print(f"[{NODE_PREFIX}] temporary media upload via {service_name} failed: {exc}")
+
+    raise ConnectionError(
+        "Temporary media upload failed through all available upload services. "
+        + " | ".join(failures)
+    )
+
+
 def _upload_video_reference(video):
     if video is None:
         raise ValueError("video is required.")
@@ -795,7 +881,7 @@ def _upload_video_reference(video):
 
     try:
         video.save_to(temp_path)
-        return _upload_file_to_tmpfiles(temp_path)
+        return _upload_file_to_temporary_media_host(temp_path)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -811,7 +897,7 @@ def _upload_image_reference(image):
     try:
         first_frame = _tensor2images(image)[0]
         first_frame.save(temp_path, format="PNG")
-        return _upload_file_to_tmpfiles(temp_path)
+        return _upload_file_to_temporary_media_host(temp_path)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -974,7 +1060,7 @@ def _encode_reference_video_frames_to_mp4(reference_video_frames, reference_vide
 def _upload_reference_video_frames(reference_video_frames, reference_video_info=None):
     temp_path = _encode_reference_video_frames_to_mp4(reference_video_frames, reference_video_info)
     try:
-        return _upload_file_to_tmpfiles(temp_path)
+        return _upload_file_to_temporary_media_host(temp_path)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
