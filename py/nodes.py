@@ -143,7 +143,7 @@ def _load_json_config():
         return {}
 
     try:
-        with CONFIG_JSON_PATH.open("r", encoding="utf-8") as handle:
+        with CONFIG_JSON_PATH.open("r", encoding="utf-8-sig") as handle:
             config_data = json.load(handle)
     except json.JSONDecodeError as exc:
         raise ValueError(f"{CONFIG_JSON_PATH.name} is not valid JSON: {exc}") from exc
