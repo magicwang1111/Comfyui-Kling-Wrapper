@@ -33,4 +33,6 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `12_comfyui_kling_wrapper_video_to_audio.json`: video-to-audio workflow.
 - `13_comfyui_kling_wrapper_lip_sync_from_text.json`: lip-sync workflow driven by text input.
 - `14_comfyui_kling_wrapper_effects_single_image.json`: single-image effects workflow.
+- `15_comfyui_kling_wrapper_advanced_element_subject_with_video2audio_music.json`: advanced subject binding followed by `Video2Audio` to add generated music/ambience to the result.
+- `16_comfyui_kling_wrapper_video_character_to_image2video.json`: create a `video_character` element from a public `video_url`, then bind that element into `Image2Video`.
 - `api_examples.py`: small Python snippets that mirror the same upgraded API wrappers.
