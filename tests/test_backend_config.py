@@ -23,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
 
 kling_package = importlib.import_module("py")
 kling_nodes = importlib.import_module("py.nodes")
+kling_capabilities = importlib.import_module("py.api.capabilities")
 kling_client = importlib.import_module("py.api.client")
 
 
@@ -50,6 +51,41 @@ class BackendConfigTests(unittest.TestCase):
             kling_package.NODE_CLASS_MAPPINGS,
         )
         self.assertNotIn("client", kling_nodes.ImageGeneratorNode.INPUT_TYPES()["required"])
+
+    def test_video_generation_nodes_expose_4k_mode(self):
+        self.assertIn("4k", kling_nodes.Text2VideoNode.INPUT_TYPES()["optional"]["mode"][0])
+        self.assertIn("4k", kling_nodes.Image2VideoNode.INPUT_TYPES()["optional"]["mode"][0])
+        self.assertIn("4k", kling_nodes.MultiImagesToVideoNode.INPUT_TYPES()["optional"]["mode"][0])
+        self.assertNotIn("4k", kling_nodes.MotionControlNode.INPUT_TYPES()["optional"]["mode"][0])
+
+    def test_kling_v3_accepts_4k_video_mode(self):
+        capability = kling_capabilities.validate_video_generation_request(
+            task_name="text2video",
+            model_name="kling-v3",
+            mode="4k",
+            duration="3",
+        )
+
+        self.assertIn("4k", capability["modes"])
+
+    def test_non_4k_models_reject_4k_video_mode(self):
+        with self.assertRaisesRegex(ValueError, "kling-v2-6 only supports modes: pro"):
+            kling_capabilities.validate_video_generation_request(
+                task_name="text2video",
+                model_name="kling-v2-6",
+                mode="4k",
+                duration="5",
+            )
+
+    def test_omni_reference_video_rejects_4k_mode(self):
+        with self.assertRaisesRegex(ValueError, "does not support mode=4k with reference_video"):
+            kling_capabilities.validate_video_generation_request(
+                task_name="image2video",
+                model_name="kling-v3-omni",
+                mode="4k",
+                duration="5",
+                has_reference_video=True,
+            )
 
     def test_runtime_client_prefers_config_local_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:

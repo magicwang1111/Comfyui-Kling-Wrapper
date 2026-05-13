@@ -4,7 +4,7 @@ from .api import Client, ImageGenerator, ImageExpander, Image2Video, Video2Audio
 from .api.capabilities import DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, DEFAULT_VIDEO_ASPECT_RATIOS, \
     DEFAULT_VIDEO_DURATIONS, ELEMENT_LIST_TYPE, ELEMENT_TYPE, EXTENDED_IMAGE_ASPECT_RATIOS, IMAGE_GENERATION_MODELS, \
     IMAGE_TO_VIDEO_MODELS, LIPSYNC_INPUT_TYPE, MULTI_IMAGE_TO_VIDEO_MODELS, NODE_CATEGORY, NODE_PREFIX, SHOT_TYPES, \
-    SOUND_OPTIONS, TEXT_TO_VIDEO_MODELS, get_image_capability, get_video_capability, \
+    SOUND_OPTIONS, TEXT_TO_VIDEO_MODELS, VIDEO_GENERATION_MODES, get_image_capability, get_video_capability, \
     validate_image_generation_request, validate_video_generation_request
 from .api.exceptions import KLingAPIError
 import base64
@@ -1527,7 +1527,7 @@ class Image2VideoNode:
                     "display": "number",
                     "lazy": True
                 }),
-                "mode": (DEFAULT_MODES,),
+                "mode": (VIDEO_GENERATION_MODES,),
                 "duration": (DEFAULT_VIDEO_DURATIONS,),
                 "camera_control_type": (CAMERA_CONTROL_TYPES,),
                 "camera_control_config": (CAMERA_CONTROL_CONFIGS,),
@@ -1677,7 +1677,7 @@ class Text2VideoNode:
                     "display": "number",
                     "lazy": True
                 }),
-                "mode": (DEFAULT_MODES,),
+                "mode": (VIDEO_GENERATION_MODES,),
                 "aspect_ratio": (DEFAULT_VIDEO_ASPECT_RATIOS,),
                 "duration": (DEFAULT_VIDEO_DURATIONS,),
                 "camera_control_type": (CAMERA_CONTROL_TYPES,),
@@ -2265,7 +2265,7 @@ class MultiImagesToVideoNode:
                 "image_tail": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
-                "mode": (DEFAULT_MODES,),
+                "mode": (VIDEO_GENERATION_MODES,),
                 "duration": (DEFAULT_VIDEO_DURATIONS,),
                 "aspect_ratio": (EXTENDED_IMAGE_ASPECT_RATIOS[:-1],),
             }

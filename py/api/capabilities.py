@@ -11,6 +11,7 @@ EXTENDED_IMAGE_ASPECT_RATIOS = ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3
 DEFAULT_IMAGE_RESOLUTIONS = ["1k", "2k"]
 DEFAULT_VIDEO_DURATIONS = ["3", "5", "10", "15"]
 DEFAULT_MODES = ["std", "pro"]
+VIDEO_GENERATION_MODES = ["std", "pro", "4k"]
 SHOT_TYPES = ["single", "intelligence"]
 SOUND_OPTIONS = ["off", "on"]
 
@@ -223,7 +224,7 @@ VIDEO_MODEL_CAPABILITIES = {
     },
     "kling-v3": {
         "tasks": {"text2video", "image2video", "multi_image2video"},
-        "modes": ["std", "pro"],
+        "modes": ["std", "pro", "4k"],
         "durations": ["3", "5", "10", "15"],
         "supports_camera_control": False,
         "supports_image_tail": True,
@@ -239,7 +240,7 @@ VIDEO_MODEL_CAPABILITIES = {
     },
     "kling-v3-omni": {
         "tasks": {"text2video", "image2video", "multi_image2video"},
-        "modes": ["std", "pro"],
+        "modes": ["std", "pro", "4k"],
         "durations": ["3", "5", "10", "15"],
         "reference_video_durations": ["3", "5", "10"],
         "supports_camera_control": False,
@@ -390,6 +391,9 @@ def validate_video_generation_request(
 
     if model_name == "kling-v3-omni" and has_reference_video and (has_sound or has_voice_list):
         raise ValueError("kling-v3-omni cannot use reference_video together with native audio generation.")
+
+    if model_name == "kling-v3-omni" and mode == "4k" and has_reference_video:
+        raise ValueError("kling-v3-omni does not support mode=4k with reference_video.")
 
     if has_sound and not capability.get("supports_sound", False):
         raise ValueError(f"Model {model_name} does not support sound control.")

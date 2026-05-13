@@ -52,10 +52,17 @@ Visible multi-image video models:
 - `kling-v2-5-turbo`
 - `kling-v3`
 
+Visible video generation modes:
+
+- `std`
+- `pro`
+- `4k` (`kling-v3` text-to-video, image-to-video, and multi-image video only; the API uses `mode: "4k"`)
+
 Documented newer models such as `kling-image-o1`, `kling-video-o1`, and `kling-v3-omni` still exist in the internal capability map, but are hidden from the UI until live endpoint support is confirmed for normal accounts.
 
 ## Important limitations
 
+- Native 4K video output is exposed through the video `mode` dropdown. Models that do not support `mode=4k` will be rejected by the node capability checks before submission.
 - Native `sound` and `voice_preset` support is currently only verified for `kling-v2-6` on the active endpoint.
 - `kling-v3`, `kling-v3-omni`, and `kling-video-o1` may appear in official docs, but the current public endpoint does not expose native sound control for them through this plugin.
 - `Advanced Element Create` requires 1 frontal subject image plus 1-3 additional reference images of the same subject. Background images do not count as reference images.
