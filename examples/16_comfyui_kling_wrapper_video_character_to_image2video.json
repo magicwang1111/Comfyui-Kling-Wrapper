@@ -1,0 +1,289 @@
+{
+  "id": "Comfyui-Kling-Wrapper-example",
+  "revision": 0,
+  "last_node_id": 6,
+  "last_link_id": 4,
+  "nodes": [
+    {
+      "id": 2,
+      "type": "LoadImage",
+      "pos": [
+        40,
+        430
+      ],
+      "size": [
+        290,
+        340
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "example_scene.png",
+        "image"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "Comfyui-Kling-Wrapper Advanced Element Create",
+      "pos": [
+        420,
+        140
+      ],
+      "size": [
+        390,
+        278
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "element",
+          "type": "COMFYUI_KLING_WRAPPER_ELEMENT",
+          "links": [
+            2
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "element_id",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        },
+        {
+          "name": "element_json",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 2
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Advanced Element Create"
+      },
+      "widgets_values": [
+        "video_character",
+        "demo_video_char",
+        "A reusable character created from a reference video for identity and motion consistency.",
+        "https://example.com/replace-with-public-character-reference.mp4",
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Comfyui-Kling-Wrapper Element List Builder",
+      "pos": [
+        860,
+        140
+      ],
+      "size": [
+        340,
+        180
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "element_1",
+          "type": "COMFYUI_KLING_WRAPPER_ELEMENT",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "element_list",
+          "type": "COMFYUI_KLING_WRAPPER_ELEMENT_LIST",
+          "links": [
+            3
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "element_list_json",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Element List Builder"
+      },
+      "widgets_values": [
+        ""
+      ]
+    },
+    {
+      "id": 5,
+      "type": "Comfyui-Kling-Wrapper Image2Video",
+      "pos": [
+        860,
+        420
+      ],
+      "size": [
+        430,
+        520
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1,
+          "shape": 7
+        },
+        {
+          "name": "image_tail",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "element_list",
+          "type": "COMFYUI_KLING_WRAPPER_ELEMENT_LIST",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "url",
+          "type": "STRING",
+          "links": [
+            4
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "video_id",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Image2Video"
+      },
+      "widgets_values": [
+        "kling-v3",
+        "Use the bound video character as the same subject. Keep identity consistent while the camera slowly moves.",
+        "",
+        0.5,
+        "pro",
+        "5",
+        "None",
+        "horizontal",
+        0.5,
+        "off",
+        "None",
+        "single",
+        ""
+      ]
+    },
+    {
+      "id": 6,
+      "type": "Comfyui-Kling-Wrapper Preview Video",
+      "pos": [
+        1340,
+        420
+      ],
+      "size": [
+        430,
+        820
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video_url",
+          "type": "STRING",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "file_path",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Preview Video"
+      },
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      5,
+      1,
+      "IMAGE"
+    ],
+    [
+      2,
+      3,
+      0,
+      4,
+      0,
+      "COMFYUI_KLING_WRAPPER_ELEMENT"
+    ],
+    [
+      3,
+      4,
+      0,
+      5,
+      4,
+      "COMFYUI_KLING_WRAPPER_ELEMENT_LIST"
+    ],
+    [
+      4,
+      5,
+      0,
+      6,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9,
+      "offset": [
+        0,
+        0
+      ]
+    },
+    "frontendVersion": "1.42.8"
+  },
+  "version": 0.4
+}
