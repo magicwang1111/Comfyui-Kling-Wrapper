@@ -6,7 +6,7 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 
 - Create and fill in `config.local.json` in the repository root before importing the workflows.
 - You can copy `config.example.json` in the repository root as a starting template.
-- Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, and `example_scene.png` with files that exist in your ComfyUI input directory.
+- Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, `example_scene.png`, `example_lipsync_source.mp4`, and `example_lipsync_audio.wav` with files that exist in your ComfyUI input directory.
 - Native `sound` and `voice_preset` support is currently only verified for `kling-v2-6`.
 - Newer documented models such as `kling-video-o1` and `kling-v3-omni` are intentionally hidden from the visible dropdowns until live endpoint support is confirmed.
 
@@ -35,4 +35,5 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `14_comfyui_kling_wrapper_effects_single_image.json`: single-image effects workflow.
 - `15_comfyui_kling_wrapper_advanced_element_subject_with_video2audio_music.json`: advanced subject binding followed by `Video2Audio` to add generated music/ambience to the result.
 - `16_comfyui_kling_wrapper_video_character_to_image2video.json`: create a `video_character` element from a public `video_url`, then bind that element into `Image2Video`.
+- `17_comfyui_kling_wrapper_lip_sync_from_uploaded_audio_video.json`: lip-sync workflow using direct `LoadAudio` and `VHS_LoadVideo` uploads.
 - `api_examples.py`: small Python snippets that mirror the same upgraded API wrappers.

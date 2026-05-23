@@ -87,6 +87,124 @@ class BackendConfigTests(unittest.TestCase):
                 has_reference_video=True,
             )
 
+    def test_lip_sync_nodes_expose_direct_audio_and_video_inputs(self):
+        audio_inputs = kling_nodes.LipSyncAudioInputNode.INPUT_TYPES()["optional"]
+        video_inputs = kling_nodes.LipSyncNode.INPUT_TYPES()["optional"]
+
+        self.assertEqual(audio_inputs["audio"][0], "AUDIO")
+        self.assertEqual(video_inputs["video_input"][0], "VIDEO")
+        self.assertEqual(video_inputs["video_frames"][0], "IMAGE")
+        self.assertEqual(video_inputs["video_info"][0], "VHS_VIDEOINFO")
+
+    def test_lip_sync_audio_input_accepts_comfy_audio(self):
+        fake_audio = {"waveform": object(), "sample_rate": 44100}
+
+        with mock.patch.object(kling_nodes, "_audio_to_base64", return_value="encoded-audio") as encode_mock:
+            lip_sync_input, = kling_nodes.LipSyncAudioInputNode().run(audio=fake_audio)
+
+        encode_mock.assert_called_once_with(fake_audio)
+        self.assertEqual(lip_sync_input.mode, "audio2video")
+        self.assertEqual(lip_sync_input.audio_type, "file")
+        self.assertEqual(lip_sync_input.audio_file, "encoded-audio")
+
+    def test_lip_sync_audio_input_rejects_multiple_sources(self):
+        with self.assertRaisesRegex(ValueError, "Provide only one"):
+            kling_nodes.LipSyncAudioInputNode().run(
+                audio={"waveform": object(), "sample_rate": 44100},
+                audio_url="https://example.com/audio.mp3",
+            )
+
+    def test_lip_sync_uploads_video_frames(self):
+        sentinel_client = object()
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        class FakeLipSync:
+            last_instance = None
+
+            def __init__(self):
+                FakeLipSync.last_instance = self
+
+            def run(self, client):
+                self.seen_client = client
+                return SimpleNamespace(
+                    task_status="succeed",
+                    task_result=SimpleNamespace(
+                        videos=[SimpleNamespace(url="https://example.com/lipsync.mp4", id="video-123")]
+                    ),
+                )
+
+        fake_frames = object()
+        fake_info = {"loaded_fps": 25.0}
+        lip_sync_input = SimpleNamespace(mode="audio2video", audio_type="file", audio_file="encoded-audio")
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "LipSync", FakeLipSync):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_upload_reference_video_frames",
+                    return_value="https://tmpfiles.org/dl/123/source.mp4",
+                ) as upload_mock:
+                    url, video_id = kling_nodes.LipSyncNode().run(
+                        lip_sync_input,
+                        face_id="",
+                        video_frames=fake_frames,
+                        video_info=fake_info,
+                    )
+
+        upload_mock.assert_called_once_with(fake_frames, fake_info)
+        self.assertEqual(url, "https://example.com/lipsync.mp4")
+        self.assertEqual(video_id, "video-123")
+        self.assertEqual(FakeLipSync.last_instance.input.video_id, "")
+        self.assertEqual(FakeLipSync.last_instance.input.video_url, "https://tmpfiles.org/dl/123/source.mp4")
+        self.assertEqual(FakeLipSync.last_instance.seen_client, sentinel_client)
+
+    def test_lip_sync_uploads_video_input_object(self):
+        sentinel_client = object()
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        class FakeLipSync:
+            last_instance = None
+
+            def __init__(self):
+                FakeLipSync.last_instance = self
+
+            def run(self, client):
+                self.seen_client = client
+                return SimpleNamespace(
+                    task_status="succeed",
+                    task_result=SimpleNamespace(
+                        videos=[SimpleNamespace(url="https://example.com/lipsync.mp4", id="video-456")]
+                    ),
+                )
+
+        fake_video = object()
+        lip_sync_input = SimpleNamespace(mode="audio2video", audio_type="file", audio_file="encoded-audio")
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "LipSync", FakeLipSync):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_upload_video_reference",
+                    return_value="https://tmpfiles.org/dl/456/source.mp4",
+                ) as upload_mock:
+                    url, video_id = kling_nodes.LipSyncNode().run(
+                        lip_sync_input,
+                        face_id="face-1",
+                        video_input=fake_video,
+                    )
+
+        upload_mock.assert_called_once_with(fake_video)
+        self.assertEqual(url, "https://example.com/lipsync.mp4")
+        self.assertEqual(video_id, "video-456")
+        self.assertEqual(FakeLipSync.last_instance.input.video_url, "https://tmpfiles.org/dl/456/source.mp4")
+        self.assertEqual(FakeLipSync.last_instance.input.face_id, "face-1")
+
     def test_runtime_client_prefers_config_local_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)

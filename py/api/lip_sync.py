@@ -4,6 +4,7 @@ from .prediction import Prediction, VideoPredictionResponse
 class LipSyncInput(Prediction):
     video_id: str
     video_url: str
+    face_id: str
     mode: str
     text: str
     voice_id: str

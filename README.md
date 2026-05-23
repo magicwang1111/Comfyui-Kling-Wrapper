@@ -153,6 +153,14 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 - `Comfyui-Kling-Wrapper Preview Video`
 - `Comfyui-Kling-Wrapper Preview Audio`
 
+## Lip sync notes
+
+`Lip Sync Audio Input` accepts a ComfyUI `AUDIO` connection directly, plus the older `audio_file` and `audio_url` fields. Connected `AUDIO` is encoded as a temporary WAV payload for Kling.
+
+`Lip Sync` accepts generated `video_id`, public `video_url`, local `video_file`, ComfyUI `VIDEO`, or `video_frames` plus `video_info` from `VHS_LoadVideo`. Local video inputs are uploaded through the same temporary media relay used by motion control.
+
+For a Video Helper Suite workflow, connect `LoadAudio` -> `Lip Sync Audio Input.audio`, then connect `VHS_LoadVideo.IMAGE` -> `Lip Sync.video_frames` and `VHS_LoadVideo.video_info` -> `Lip Sync.video_info`.
+
 ## Motion control notes
 
 `Motion Control` now accepts reference video only from workflow inputs:

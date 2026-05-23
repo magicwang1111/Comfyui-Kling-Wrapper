@@ -745,14 +745,48 @@ def _normalize_tmpfiles_download_url(page_url):
     return f"https://tmpfiles.org/dl/{path}"
 
 
-def _resolve_upload_file_path(file_path):
-    normalized_path = os.path.abspath(os.fspath(file_path))
-    if not os.path.exists(normalized_path):
-        raise ValueError(f"Upload file does not exist: {normalized_path}")
-    if not os.path.isfile(normalized_path):
-        raise ValueError(f"Upload path is not a file: {normalized_path}")
+def _windows_path_to_wsl_path(file_path):
+    raw_path = os.fspath(file_path).strip().strip('"')
+    match = re.match(r"^([A-Za-z]):[\\/](.*)$", raw_path)
+    if os.name != "nt" and match:
+        drive = match.group(1).lower()
+        rest = match.group(2).replace("\\", "/")
+        return f"/mnt/{drive}/{rest}"
+    return raw_path
 
-    return normalized_path
+
+def _resolve_upload_file_path(file_path):
+    raw_path = str(file_path or "").strip()
+    if not raw_path:
+        raise ValueError("Upload file path is required.")
+
+    converted_path = _windows_path_to_wsl_path(raw_path)
+    candidates = [converted_path]
+    if not os.path.isabs(converted_path):
+        candidates.append(os.path.abspath(converted_path))
+        try:
+            candidates.append(folder_paths.get_annotated_filepath(raw_path))
+        except Exception:
+            pass
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        normalized_path = os.path.abspath(os.fspath(candidate))
+        if normalized_path in seen:
+            continue
+        seen.add(normalized_path)
+        if os.path.isfile(normalized_path):
+            return normalized_path
+
+    raise ValueError(f"Upload file does not exist or is not a file: {converted_path}")
+
+
+def _read_file_as_base64(file_path):
+    normalized_path = _resolve_upload_file_path(file_path)
+    with open(normalized_path, "rb") as handle:
+        return base64.b64encode(handle.read()).decode("utf-8")
 
 
 def _normalize_catbox_upload_url(raw_url):
@@ -1114,6 +1148,52 @@ def _upload_video_reference(video):
             os.remove(temp_path)
 
 
+def _audio_to_base64(audio):
+    if audio is None:
+        raise ValueError("audio is required.")
+    if not isinstance(audio, dict):
+        raise ValueError("audio must be a ComfyUI AUDIO object.")
+    if "waveform" not in audio or "sample_rate" not in audio:
+        raise ValueError("audio must contain waveform and sample_rate.")
+
+    try:
+        import torchaudio
+    except Exception as exc:
+        raise RuntimeError("torchaudio is required to encode ComfyUI AUDIO input for lip sync.") from exc
+
+    waveform = audio["waveform"]
+    if hasattr(waveform, "detach"):
+        waveform = waveform.detach()
+    if hasattr(waveform, "cpu"):
+        waveform = waveform.cpu()
+    if not isinstance(waveform, torch.Tensor):
+        waveform = torch.as_tensor(waveform)
+
+    if waveform.dim() == 3:
+        waveform = waveform[0]
+    elif waveform.dim() == 1:
+        waveform = waveform.unsqueeze(0)
+    elif waveform.dim() != 2:
+        raise ValueError("audio waveform must have shape [batch, channels, samples], [channels, samples], or [samples].")
+
+    try:
+        sample_rate = int(audio["sample_rate"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("audio sample_rate must be an integer.") from exc
+    if sample_rate <= 0:
+        raise ValueError("audio sample_rate must be greater than 0.")
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
+        temp_path = handle.name
+
+    try:
+        torchaudio.save(temp_path, waveform, sample_rate)
+        return _read_file_as_base64(temp_path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
 def _upload_image_reference(image):
     if image is None:
         raise ValueError("image is required.")
@@ -1313,6 +1393,56 @@ def _resolve_motion_control_reference_video(
         raise ValueError("reference_video must be an http(s) URL when provided.")
 
     return ""
+
+
+def _resolve_lip_sync_video_reference(
+        video_id=None,
+        video_url=None,
+        video_file="",
+        video_input=None,
+        video_frames=None,
+        video_info=None,
+):
+    video_id = str(video_id or "").strip()
+    video_url = str(video_url or "").strip()
+    video_file = str(video_file or "").strip()
+    sources = [
+        name for name, present in (
+            ("video_id", bool(video_id)),
+            ("video_url", bool(video_url)),
+            ("video_file", bool(video_file)),
+            ("video_input", video_input is not None),
+            ("video_frames", video_frames is not None),
+        )
+        if present
+    ]
+
+    if not sources:
+        raise ValueError(
+            "Provide video_id, video_url, video_file, video_input, or video_frames for lip sync."
+        )
+    if len(sources) > 1:
+        raise ValueError(
+            "Provide only one of video_id, video_url, video_file, video_input, or video_frames for lip sync."
+        )
+
+    if video_id:
+        return video_id, ""
+
+    if video_input is not None:
+        return "", _upload_video_reference(video_input)
+
+    if video_frames is not None:
+        return "", _upload_reference_video_frames(video_frames, video_info)
+
+    if video_file:
+        if _is_http_url(video_file):
+            return "", video_file
+        return "", _upload_file_to_temporary_media_host(video_file)
+
+    if _is_http_url(video_url):
+        return "", video_url
+    return "", _upload_file_to_temporary_media_host(video_url)
 
 
 class ImageGeneratorNode:
@@ -2043,6 +2173,7 @@ class LipSyncAudioInputNode:
     def INPUT_TYPES(cls):
         return {
             "optional": {
+                "audio": ("AUDIO",),
                 "audio_file": ("STRING", {"multiline": False, "default": ""}),
                 "audio_url": ("STRING", {"multiline": False, "default": ""}),
             },
@@ -2055,19 +2186,33 @@ class LipSyncAudioInputNode:
     RETURN_TYPES = (LIPSYNC_INPUT_TYPE,)
     RETURN_NAMES = ("input",)
 
-    def run(self, audio_file, audio_url):
+    def run(self, audio=None, audio_file="", audio_url=""):
+        audio_file = str(audio_file or "").strip()
+        audio_url = str(audio_url or "").strip()
+        sources = [
+            name for name, present in (
+                ("audio", audio is not None),
+                ("audio_file", bool(audio_file)),
+                ("audio_url", bool(audio_url)),
+            )
+            if present
+        ]
+        if not sources:
+            raise ValueError("Provide audio, audio_file, or audio_url for lip sync audio input.")
+        if len(sources) > 1:
+            raise ValueError("Provide only one of audio, audio_file, or audio_url for lip sync audio input.")
+
         input = LipSyncInput()
         input.mode = "audio2video"
-        if audio_file is not None and len(audio_file) > 0:
+        if audio is not None:
             input.audio_type = "file"
-            if os.path.exists(audio_file):
-                with open(audio_file, 'rb') as file:
-                    file_data = file.read()
-                    input.audio_file = base64.b64encode(file_data).decode('utf-8')
-            else:
-                raise Exception(f"Audio file not found: {audio_file}")
-
-        if audio_url is not None and len(audio_url) > 0:
+            input.audio_file = _audio_to_base64(audio)
+        elif audio_file:
+            input.audio_type = "file"
+            input.audio_file = _read_file_as_base64(audio_file)
+        else:
+            if not _is_http_url(audio_url):
+                raise ValueError("audio_url must be an http(s) URL. Use audio or audio_file for local audio.")
             input.audio_type = "url"
             input.audio_url = audio_url
 
@@ -2085,6 +2230,10 @@ class LipSyncNode:
             "optional": {
                 "video_id": ("STRING", {"multiline": False, "default": ""}),
                 "video_url": ("STRING", {"multiline": False, "default": ""}),
+                "video_file": ("STRING", {"multiline": False, "default": ""}),
+                "video_input": ("VIDEO",),
+                "video_frames": ("IMAGE",),
+                "video_info": ("VHS_VIDEOINFO",),
             }
         }
 
@@ -2095,9 +2244,25 @@ class LipSyncNode:
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("url", "video_id")
 
-    def run(self, input, face_id, video_id=None, video_url=None):
-        if not video_id and not video_url:
-            raise Exception("Please input video_id or video_url.")
+    def run(
+            self,
+            input,
+            face_id,
+            video_id=None,
+            video_url=None,
+            video_file="",
+            video_input=None,
+            video_frames=None,
+            video_info=None,
+    ):
+        video_id, video_url = _resolve_lip_sync_video_reference(
+            video_id=video_id,
+            video_url=video_url,
+            video_file=video_file,
+            video_input=video_input,
+            video_frames=video_frames,
+            video_info=video_info,
+        )
 
         generator = LipSync()
         input.video_id = video_id
@@ -2109,11 +2274,9 @@ class LipSyncNode:
         with _runtime_client() as client:
             response = generator.run(client)
 
-        for video_info in response.task_result.videos:
-            print(f'KLing API output video id: {video_info.id}, url: {video_info.url}')
-            return (video_info.url, video_info.id)
-
-        return ('', '')
+        video_url, video_id = _extract_first_video_result(response, "lip_sync")
+        print(f'KLing API output video id: {video_id}, url: {video_url}')
+        return (video_url, video_id)
 
 
 class EffectNode:
