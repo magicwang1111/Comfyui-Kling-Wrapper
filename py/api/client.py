@@ -10,6 +10,18 @@ DEFAULT_GET_RETRY_DELAY = 1.0
 DEFAULT_CONNECT_RETRY_COUNT = 2
 
 
+def _preview_payload(value, max_string_length=80):
+    if isinstance(value, str):
+        if len(value) > max_string_length:
+            return value[:max_string_length] + "...[truncated]"
+        return value
+    if isinstance(value, list):
+        return [_preview_payload(item, max_string_length) for item in value]
+    if isinstance(value, dict):
+        return {key: _preview_payload(item, max_string_length) for key, item in value.items()}
+    return value
+
+
 def _raise_for_status(resp: httpx.Response) -> None:
     if resp.status_code != 200 or 'data' not in resp.json():
         raise KLingAPIError.from_response(resp)
@@ -39,7 +51,7 @@ class Client:
         method_upper = str(method or "").upper()
         if "json" in kwargs:
             import json as _json
-            _preview = {k: (v[:60] + "...[truncated]" if isinstance(v, str) and len(v) > 60 else v) for k, v in kwargs["json"].items()}
+            _preview = _preview_payload(kwargs["json"])
             print(f"[KLING DEBUG] {method} {path} payload keys={list(kwargs['json'].keys())}")
             print(f"[KLING DEBUG] payload preview: {_json.dumps(_preview, default=str)[:500]}")
         retry_count = DEFAULT_GET_RETRY_COUNT if method_upper == "GET" else DEFAULT_CONNECT_RETRY_COUNT

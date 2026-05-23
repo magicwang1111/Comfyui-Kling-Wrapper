@@ -1149,7 +1149,7 @@ def _upload_video_reference(video):
             os.remove(temp_path)
 
 
-def _audio_to_base64(audio):
+def _write_audio_to_temp_wav(audio):
     if audio is None:
         raise ValueError("audio is required.")
     if not isinstance(audio, dict):
@@ -1193,7 +1193,17 @@ def _audio_to_base64(audio):
             wav_file.setsampwidth(2)
             wav_file.setframerate(sample_rate)
             wav_file.writeframes(pcm.tobytes())
-        return _read_file_as_base64(temp_path)
+        return temp_path
+    except Exception:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise
+
+
+def _upload_audio_reference(audio):
+    temp_path = _write_audio_to_temp_wav(audio)
+    try:
+        return _upload_file_to_temporary_media_host(temp_path)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -2210,11 +2220,11 @@ class LipSyncAudioInputNode:
         input = LipSyncInput()
         input.mode = "audio2video"
         if audio is not None:
-            input.audio_type = "file"
-            input.audio_file = _audio_to_base64(audio)
+            input.audio_type = "url"
+            input.audio_url = _upload_audio_reference(audio)
         elif audio_file:
-            input.audio_type = "file"
-            input.audio_file = _read_file_as_base64(audio_file)
+            input.audio_type = "url"
+            input.audio_url = _upload_file_to_temporary_media_host(audio_file)
         else:
             if not _is_http_url(audio_url):
                 raise ValueError("audio_url must be an http(s) URL. Use audio or audio_file for local audio.")

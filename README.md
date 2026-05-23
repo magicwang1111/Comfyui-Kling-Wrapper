@@ -155,7 +155,7 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 
 ## Lip sync notes
 
-`Lip Sync Audio Input` accepts a ComfyUI `AUDIO` connection directly, plus the older `audio_file` and `audio_url` fields. Connected `AUDIO` is encoded as a temporary WAV payload for Kling.
+`Lip Sync Audio Input` accepts a ComfyUI `AUDIO` connection directly, plus the older `audio_file` and `audio_url` fields. Connected or local audio is uploaded through the same temporary media relay used by video inputs, then submitted to Kling as `audio_url`.
 
 `Lip Sync` accepts generated `video_id`, public `video_url`, local `video_file`, ComfyUI `VIDEO`, or `video_frames` plus `video_info` from `VHS_LoadVideo`. Local video inputs are uploaded through the same temporary media relay used by motion control.
 

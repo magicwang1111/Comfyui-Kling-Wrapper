@@ -99,13 +99,25 @@ class BackendConfigTests(unittest.TestCase):
     def test_lip_sync_audio_input_accepts_comfy_audio(self):
         fake_audio = {"waveform": object(), "sample_rate": 44100}
 
-        with mock.patch.object(kling_nodes, "_audio_to_base64", return_value="encoded-audio") as encode_mock:
+        with mock.patch.object(kling_nodes, "_upload_audio_reference", return_value="https://example.com/audio.wav") as upload_mock:
             lip_sync_input, = kling_nodes.LipSyncAudioInputNode().run(audio=fake_audio)
 
-        encode_mock.assert_called_once_with(fake_audio)
+        upload_mock.assert_called_once_with(fake_audio)
         self.assertEqual(lip_sync_input.mode, "audio2video")
-        self.assertEqual(lip_sync_input.audio_type, "file")
-        self.assertEqual(lip_sync_input.audio_file, "encoded-audio")
+        self.assertEqual(lip_sync_input.audio_type, "url")
+        self.assertEqual(lip_sync_input.audio_url, "https://example.com/audio.wav")
+
+    def test_lip_sync_audio_input_uploads_audio_file(self):
+        with mock.patch.object(
+            kling_nodes,
+            "_upload_file_to_temporary_media_host",
+            return_value="https://example.com/local-audio.wav",
+        ) as upload_mock:
+            lip_sync_input, = kling_nodes.LipSyncAudioInputNode().run(audio_file="D:/input/local-audio.wav")
+
+        upload_mock.assert_called_once_with("D:/input/local-audio.wav")
+        self.assertEqual(lip_sync_input.audio_type, "url")
+        self.assertEqual(lip_sync_input.audio_url, "https://example.com/local-audio.wav")
 
     def test_lip_sync_audio_input_rejects_multiple_sources(self):
         with self.assertRaisesRegex(ValueError, "Provide only one"):
