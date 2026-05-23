@@ -31,6 +31,7 @@ from comfy_extras.nodes_audio import LoadAudio
 import time
 import urllib.parse
 import uuid
+import wave
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -1156,11 +1157,6 @@ def _audio_to_base64(audio):
     if "waveform" not in audio or "sample_rate" not in audio:
         raise ValueError("audio must contain waveform and sample_rate.")
 
-    try:
-        import torchaudio
-    except Exception as exc:
-        raise RuntimeError("torchaudio is required to encode ComfyUI AUDIO input for lip sync.") from exc
-
     waveform = audio["waveform"]
     if hasattr(waveform, "detach"):
         waveform = waveform.detach()
@@ -1175,6 +1171,8 @@ def _audio_to_base64(audio):
         waveform = waveform.unsqueeze(0)
     elif waveform.dim() != 2:
         raise ValueError("audio waveform must have shape [batch, channels, samples], [channels, samples], or [samples].")
+    if waveform.shape[0] <= 0 or waveform.shape[1] <= 0:
+        raise ValueError("audio waveform must contain at least one channel and one sample.")
 
     try:
         sample_rate = int(audio["sample_rate"])
@@ -1187,7 +1185,14 @@ def _audio_to_base64(audio):
         temp_path = handle.name
 
     try:
-        torchaudio.save(temp_path, waveform, sample_rate)
+        waveform = waveform.to(dtype=torch.float32).numpy()
+        pcm = numpy.clip(waveform, -1.0, 1.0)
+        pcm = (pcm.T * 32767.0).astype(numpy.int16)
+        with wave.open(temp_path, "wb") as wav_file:
+            wav_file.setnchannels(int(waveform.shape[0]))
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(pcm.tobytes())
         return _read_file_as_base64(temp_path)
     finally:
         if os.path.exists(temp_path):
