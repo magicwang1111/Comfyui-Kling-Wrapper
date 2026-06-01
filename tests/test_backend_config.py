@@ -300,6 +300,92 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(url, "https://example.com/video.mp4")
         self.assertEqual(video_id, "video-123")
 
+    def test_advanced_element_image_subject_sends_minimal_payload(self):
+        sentinel_client = object()
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        def fake_run(generator, client):
+            captured["client"] = client
+            captured["payload"] = generator.to_dict()
+            return SimpleNamespace(task_id="task-123", final_unit_deduction=1.0)
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.AdvancedCustomElements, "run", fake_run):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_image_batch_to_base64_list",
+                    side_effect=[["front"], ["left", "right", "rear"]],
+                ):
+                    payload, element_id, element_json = kling_nodes.AdvancedCustomElementCreateNode().create(
+                        element_type="image_subject",
+                        element_name="shoe",
+                        element_description="Nike Kobe Air Force 1 Low",
+                        image=object(),
+                        image_list=object(),
+                        element_voice_id="voice-123",
+                    )
+
+        self.assertEqual(
+            captured["payload"],
+            {
+                "reference_type": "image_refer",
+                "element_image_list": {
+                    "frontal_image": "front",
+                    "refer_images": [
+                        {"image_url": "left"},
+                        {"image_url": "right"},
+                        {"image_url": "rear"},
+                    ],
+                },
+                "element_voice_id": "voice-123",
+                "element_name": "shoe",
+                "element_description": "Nike Kobe Air Force 1 Low",
+            },
+        )
+        self.assertIs(captured["client"], sentinel_client)
+        self.assertEqual(payload, {"task_id": "task-123"})
+        self.assertEqual(element_id, "")
+        self.assertEqual(json.loads(element_json), payload)
+
+    def test_advanced_element_video_subject_sends_minimal_payload(self):
+        sentinel_client = object()
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        def fake_run(generator, client):
+            captured["client"] = client
+            captured["payload"] = generator.to_dict()
+            return SimpleNamespace(task_id="task-456", final_unit_deduction=1.0)
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.AdvancedCustomElements, "run", fake_run):
+                kling_nodes.AdvancedCustomElementCreateNode().create(
+                    element_type="video_character",
+                    element_name="actor",
+                    element_description="Character reference",
+                    video_url=" https://example.com/reference.mp4 ",
+                )
+
+        self.assertEqual(
+            captured["payload"],
+            {
+                "reference_type": "video_refer",
+                "element_video_list": {
+                    "refer_videos": [{"video_url": "https://example.com/reference.mp4"}],
+                },
+                "element_name": "actor",
+                "element_description": "Character reference",
+            },
+        )
+        self.assertIs(captured["client"], sentinel_client)
+
     def test_preview_video_returns_local_video_url_when_saved(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)

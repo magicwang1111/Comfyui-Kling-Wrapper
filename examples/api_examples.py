@@ -51,11 +51,13 @@ def example_create_advanced_element(client: Client, frontal_image_path: str, ref
     if not 1 <= len(reference_image_paths) <= 3:
         raise ValueError("Provide 1-3 additional reference images of the same subject.")
     task = AdvancedCustomElements()
-    task.name = "demo_subject"
-    task.description = "A clear portrait of the subject with consistent identity traits for reuse in video generation."
+    task.element_name = "demo_subject"
+    task.element_description = "A clear portrait of the subject with consistent identity traits for reuse in video generation."
     task.reference_type = "image_refer"
-    task.frontal_image = image_to_base64(frontal_image_path)
-    task.refer_images = [image_to_base64(path) for path in reference_image_paths]
+    task.element_image_list = {
+        "frontal_image": image_to_base64(frontal_image_path),
+        "refer_images": [{"image_url": image_to_base64(path)} for path in reference_image_paths],
+    }
     return task.run(client)
 
 

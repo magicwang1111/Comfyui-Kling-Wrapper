@@ -2554,11 +2554,6 @@ class AdvancedCustomElementCreateNode:
         element_name = (element_name or "").strip()
         element_description = (element_description or "").strip()
 
-        generator.type = element_type
-        generator.element_type = element_type
-        generator.elementType = element_type
-
-        # Keep the newer reference-style payload too for accounts using the upgraded schema.
         if element_type in ("image_subject", "multi_image_subject"):
             generator.reference_type = "image_refer"
         else:  # video_character
@@ -2587,44 +2582,24 @@ class AdvancedCustomElementCreateNode:
                 )
 
         if element_type == "image_subject":
-            element_image_list_payload = {
+            generator.element_image_list = {
                 "frontal_image": merged_image_list[0],
                 "refer_images": [{"image_url": image_b64} for image_b64 in merged_image_list[1:]],
             }
-            generator.image = merged_image_list[0]
-            generator.image_list = merged_image_list
-            generator.imageList = merged_image_list
-            generator.element_image_list = element_image_list_payload
-            generator.elementImageList = json.dumps(element_image_list_payload, ensure_ascii=False)
-            generator.frontal_image = merged_image_list[0]
-            generator.refer_images = merged_image_list[1:]
         elif element_type == "multi_image_subject":
-            element_image_list_payload = {
+            generator.element_image_list = {
                 "frontal_image": merged_image_list[0],
                 "refer_images": [{"image_url": image_b64} for image_b64 in merged_image_list[1:]],
             }
-            generator.image = merged_image_list[0]
-            generator.image_list = merged_image_list
-            generator.imageList = merged_image_list
-            generator.element_image_list = element_image_list_payload
-            generator.elementImageList = json.dumps(element_image_list_payload, ensure_ascii=False)
-            generator.frontal_image = merged_image_list[0]
-            generator.refer_images = merged_image_list[1:]
         elif element_type == "video_character":
             if not video_url.strip():
                 raise ValueError("video_character requires video_url.")
-            element_video_list_payload = {
+            generator.element_video_list = {
                 "refer_videos": [{"video_url": video_url.strip()}],
             }
-            generator.video_url = video_url.strip()
-            generator.videoUrl = video_url.strip()
-            generator.element_video_list = [video_url.strip()]
-            generator.elementVideoList = json.dumps(element_video_list_payload, ensure_ascii=False)
 
         if element_voice_id.strip():
             generator.element_voice_id = element_voice_id.strip()
-            generator.elementVoiceId = element_voice_id.strip()
-            generator.voice_id = element_voice_id.strip()
 
         extra_payload = _parse_json_input(extra_payload_json, "extra_payload_json")
         if extra_payload:
@@ -2635,9 +2610,7 @@ class AdvancedCustomElementCreateNode:
 
         if not element_description:
             element_description = str(
-                getattr(generator, "description", "")
-                or getattr(generator, "element_description", "")
-                or getattr(generator, "elementDescription", "")
+                getattr(generator, "element_description", "")
                 or ""
             ).strip()
 
@@ -2651,9 +2624,7 @@ class AdvancedCustomElementCreateNode:
 
         if not element_name:
             element_name = str(
-                getattr(generator, "name", "")
-                or getattr(generator, "element_name", "")
-                or getattr(generator, "elementName", "")
+                getattr(generator, "element_name", "")
                 or ""
             ).strip()
 
@@ -2662,12 +2633,8 @@ class AdvancedCustomElementCreateNode:
         if len(element_name) > 20:
             raise ValueError("element_name must be 20 characters or fewer for advanced element creation.")
 
-        generator.name = element_name
         generator.element_name = element_name
-        generator.elementName = element_name
-        generator.description = element_description
         generator.element_description = element_description
-        generator.elementDescription = element_description
 
         with _runtime_client() as client:
             response = generator.run(client)
