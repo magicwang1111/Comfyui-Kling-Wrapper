@@ -391,6 +391,25 @@ def _image_batch_to_base64_list(image):
     return [base64.b64encode(_encode_image(frame)).decode("utf-8") for frame in _tensor2images(image)]
 
 
+def _upload_image_batch_references(image):
+    if image is None:
+        return []
+
+    uploaded_urls = []
+    for frame in _tensor2images(image):
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
+            temp_path = handle.name
+
+        try:
+            frame.save(temp_path, format="PNG")
+            uploaded_urls.append(_upload_file_to_temporary_media_host(temp_path))
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    return uploaded_urls
+
+
 def _parse_json_input(raw_value, field_name):
     if raw_value is None:
         return None
@@ -2561,9 +2580,9 @@ class AdvancedCustomElementCreateNode:
 
         merged_image_list = []
         if image is not None:
-            merged_image_list.extend(_image_batch_to_base64_list(image))
+            merged_image_list.extend(_upload_image_batch_references(image))
         if image_list is not None:
-            merged_image_list.extend(_image_batch_to_base64_list(image_list))
+            merged_image_list.extend(_upload_image_batch_references(image_list))
 
         if element_type in ("image_subject", "multi_image_subject"):
             # Kling's advanced element API requires one frontal image plus 1-3

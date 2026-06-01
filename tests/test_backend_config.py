@@ -317,8 +317,15 @@ class BackendConfigTests(unittest.TestCase):
             with mock.patch.object(kling_nodes.AdvancedCustomElements, "run", fake_run):
                 with mock.patch.object(
                     kling_nodes,
-                    "_image_batch_to_base64_list",
-                    side_effect=[["front"], ["left", "right", "rear"]],
+                    "_upload_image_batch_references",
+                    side_effect=[
+                        ["https://cdn.example.com/front.png"],
+                        [
+                            "https://cdn.example.com/left.png",
+                            "https://cdn.example.com/right.png",
+                            "https://cdn.example.com/rear.png",
+                        ],
+                    ],
                 ):
                     payload, element_id, element_json = kling_nodes.AdvancedCustomElementCreateNode().create(
                         element_type="image_subject",
@@ -334,11 +341,11 @@ class BackendConfigTests(unittest.TestCase):
             {
                 "reference_type": "image_refer",
                 "element_image_list": {
-                    "frontal_image": "front",
+                    "frontal_image": "https://cdn.example.com/front.png",
                     "refer_images": [
-                        {"image_url": "left"},
-                        {"image_url": "right"},
-                        {"image_url": "rear"},
+                        {"image_url": "https://cdn.example.com/left.png"},
+                        {"image_url": "https://cdn.example.com/right.png"},
+                        {"image_url": "https://cdn.example.com/rear.png"},
                     ],
                 },
                 "element_voice_id": "voice-123",
@@ -529,6 +536,40 @@ class BackendConfigTests(unittest.TestCase):
 
         self.assertEqual(url, "https://tmpfiles.org/dl/123/sample.mp4")
         self.assertEqual(post_mock.call_count, 2)
+
+    def test_upload_image_batch_references_uploads_each_frame_and_removes_temp_files(self):
+        uploaded_paths = []
+
+        class FakeFrame:
+            def save(self, path, format):
+                self.path = path
+                self.format = format
+                Path(path).write_bytes(b"png-bytes")
+
+        frames = [FakeFrame(), FakeFrame()]
+
+        def fake_upload(path):
+            uploaded_paths.append(path)
+            self.assertTrue(Path(path).is_file())
+            return f"https://cdn.example.com/{len(uploaded_paths)}.png"
+
+        with mock.patch.object(kling_nodes, "_tensor2images", return_value=frames):
+            with mock.patch.object(
+                kling_nodes,
+                "_upload_file_to_temporary_media_host",
+                side_effect=fake_upload,
+            ):
+                urls = kling_nodes._upload_image_batch_references(object())
+
+        self.assertEqual(
+            urls,
+            [
+                "https://cdn.example.com/1.png",
+                "https://cdn.example.com/2.png",
+            ],
+        )
+        self.assertEqual([frame.format for frame in frames], ["PNG", "PNG"])
+        self.assertTrue(all(not Path(path).exists() for path in uploaded_paths))
 
     def test_upload_file_to_oss_returns_signed_download_url(self):
         with tempfile.TemporaryDirectory() as tmpdir:
