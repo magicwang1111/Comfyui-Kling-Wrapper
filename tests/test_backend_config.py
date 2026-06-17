@@ -126,6 +126,261 @@ class BackendConfigTests(unittest.TestCase):
                 audio_url="https://example.com/audio.mp3",
             )
 
+    def test_custom_voice_create_accepts_comfy_audio(self):
+        sentinel_client = object()
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        def fake_run(generator, client):
+            captured["client"] = client
+            captured["payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_id="task-voice-123",
+                task_status="succeed",
+                task_status_msg="",
+                final_unit_deduction="1.0",
+                task_result=SimpleNamespace(
+                    voices=[
+                        SimpleNamespace(
+                            voice_id="voice-123",
+                            voice_name="Demo Voice",
+                            trial_url="https://example.com/trial.mp3",
+                            owned_by="creator",
+                        )
+                    ]
+                ),
+            )
+
+        fake_audio = {"waveform": object(), "sample_rate": 44100}
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.CustomVoiceCreate, "run", fake_run):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_upload_audio_reference",
+                    return_value="https://example.com/reference.wav",
+                ) as upload_mock:
+                    voice_id, voice_name, trial_url, task_id, voice_json = (
+                        kling_nodes.CustomVoiceCreateNode().create(
+                            voice_name="Demo Voice",
+                            audio=fake_audio,
+                            external_task_id="external-123",
+                        )
+                    )
+
+        upload_mock.assert_called_once_with(fake_audio)
+        self.assertIs(captured["client"], sentinel_client)
+        self.assertEqual(
+            captured["payload"],
+            {
+                "external_task_id": "external-123",
+                "voice_name": "Demo Voice",
+                "voice_url": "https://example.com/reference.wav",
+            },
+        )
+        self.assertEqual(voice_id, "voice-123")
+        self.assertEqual(voice_name, "Demo Voice")
+        self.assertEqual(trial_url, "https://example.com/trial.mp3")
+        self.assertEqual(task_id, "task-voice-123")
+        self.assertEqual(json.loads(voice_json)["voice"]["voice_id"], "voice-123")
+
+    def test_custom_voice_create_uploads_voice_file(self):
+        sentinel_client = object()
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        def fake_run(generator, client):
+            captured["payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_id="task-file-123",
+                task_status="succeed",
+                task_result=SimpleNamespace(
+                    voices=[SimpleNamespace(voice_id="voice-file", voice_name="File Voice", trial_url="")]
+                ),
+            )
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.CustomVoiceCreate, "run", fake_run):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_upload_file_to_temporary_media_host",
+                    return_value="https://example.com/local-reference.mp3",
+                ) as upload_mock:
+                    kling_nodes.CustomVoiceCreateNode().create(
+                        voice_name="File Voice",
+                        voice_file="D:/input/reference.mp3",
+                    )
+
+        upload_mock.assert_called_once_with("D:/input/reference.mp3")
+        self.assertEqual(
+            captured["payload"],
+            {
+                "voice_name": "File Voice",
+                "voice_url": "https://example.com/local-reference.mp3",
+            },
+        )
+
+    def test_custom_voice_create_rejects_missing_or_multiple_sources(self):
+        with self.assertRaisesRegex(ValueError, "Provide audio"):
+            kling_nodes.CustomVoiceCreateNode().create(voice_name="Demo Voice")
+
+        with self.assertRaisesRegex(ValueError, "Provide only one"):
+            kling_nodes.CustomVoiceCreateNode().create(
+                voice_name="Demo Voice",
+                voice_url="https://example.com/audio.mp3",
+                video_id="video-123",
+            )
+
+    def test_custom_voice_create_rejects_long_name(self):
+        with self.assertRaisesRegex(ValueError, "20 characters"):
+            kling_nodes.CustomVoiceCreateNode().create(
+                voice_name="x" * 21,
+                voice_url="https://example.com/audio.mp3",
+            )
+
+    def test_custom_voice_query_parses_voice_result(self):
+        sentinel_client = object()
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        def fake_run(generator, client):
+            captured["client"] = client
+            captured["identifier"] = generator.identifier
+            return SimpleNamespace(
+                task_id="task-query-123",
+                task_status="succeed",
+                task_result=SimpleNamespace(
+                    voices=[
+                        SimpleNamespace(
+                            voice_id="voice-query",
+                            voice_name="Query Voice",
+                            trial_url="https://example.com/query.mp3",
+                            owned_by="creator",
+                        )
+                    ]
+                ),
+            )
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.CustomVoiceQuery, "run", fake_run):
+                voice_id, voice_name, trial_url, task_id, voice_json = (
+                    kling_nodes.CustomVoiceQueryNode().query("external-123")
+                )
+
+        self.assertIs(captured["client"], sentinel_client)
+        self.assertEqual(captured["identifier"], "external-123")
+        self.assertEqual(voice_id, "voice-query")
+        self.assertEqual(voice_name, "Query Voice")
+        self.assertEqual(trial_url, "https://example.com/query.mp3")
+        self.assertEqual(task_id, "task-query-123")
+        self.assertEqual(json.loads(voice_json)["voice"]["voice_name"], "Query Voice")
+
+    def test_tts_node_builds_payload_and_returns_audio_url(self):
+        sentinel_client = object()
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        def fake_run(generator, client):
+            captured["client"] = client
+            captured["payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_id="task-tts-123",
+                task_status="succeed",
+                task_result=SimpleNamespace(
+                    audios=[
+                        SimpleNamespace(
+                            id="audio-123",
+                            url="https://example.com/output.mp3",
+                            duration="3.2",
+                        )
+                    ]
+                ),
+                final_unit_deduction="0.5",
+            )
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.TTS, "run", fake_run):
+                audio_id, audio_url, duration, audio_json = kling_nodes.TTSNode().generate(
+                    text="Hello from a cloned voice.",
+                    voice_id="voice-123",
+                    voice_language="en",
+                    voice_speed=1.2,
+                )
+
+        self.assertIs(captured["client"], sentinel_client)
+        self.assertEqual(
+            captured["payload"],
+            {
+                "text": "Hello from a cloned voice.",
+                "voice_id": "voice-123",
+                "voice_language": "en",
+                "voice_speed": 1.2,
+            },
+        )
+        self.assertEqual(audio_id, "audio-123")
+        self.assertEqual(audio_url, "https://example.com/output.mp3")
+        self.assertEqual(duration, "3.2")
+        self.assertEqual(json.loads(audio_json)["audio"]["url"], "https://example.com/output.mp3")
+
+    def test_tts_node_uses_zh_for_chinese_text_even_if_en_selected(self):
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield object()
+
+        def fake_run(generator, client):
+            captured["payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_id="task-tts-zh",
+                task_status="succeed",
+                task_result=SimpleNamespace(
+                    audios=[SimpleNamespace(id="audio-zh", url="https://example.com/zh.mp3", duration="2.0")]
+                ),
+            )
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.TTS, "run", fake_run):
+                kling_nodes.TTSNode().generate(
+                    text="二十岁有二十岁的迷茫。",
+                    voice_id="voice-zh",
+                    voice_language="en",
+                    voice_speed=1.0,
+                )
+
+        self.assertEqual(captured["payload"]["voice_language"], "zh")
+
+    def test_preview_audio_fingerprint_accepts_audio_url_inputs(self):
+        first = kling_nodes.PreviewAudio.fingerprint_inputs(
+            audio_url="https://example.com/a.mp3",
+            filename_prefix="demo",
+            save_output=True,
+        )
+        second = kling_nodes.PreviewAudio.fingerprint_inputs(
+            audio_url="https://example.com/a.mp3",
+            filename_prefix="demo",
+            save_output=True,
+        )
+
+        self.assertEqual(first, second)
+        self.assertIsInstance(first, str)
+
+    def test_custom_voice_and_tts_nodes_are_registered(self):
+        self.assertIn("Comfyui-Kling-Wrapper Custom Voice Create", kling_package.NODE_CLASS_MAPPINGS)
+        self.assertIn("Comfyui-Kling-Wrapper Custom Voice Query", kling_package.NODE_CLASS_MAPPINGS)
+        self.assertIn("Comfyui-Kling-Wrapper TTS", kling_package.NODE_CLASS_MAPPINGS)
+
     def test_lip_sync_uploads_video_frames(self):
         sentinel_client = object()
 
@@ -1014,6 +1269,30 @@ class BackendConfigTests(unittest.TestCase):
                 self.assertIn("\"type\": \"LoadVideo\"", content)
                 self.assertIn("\"reference_video_input\"", content)
                 self.assertNotIn("reference-motion.mp4", content)
+            if example_path.name == "18_comfyui_kling_wrapper_custom_voice_tts_preview.json":
+                node_by_type = {node["type"]: node for node in data["nodes"]}
+                self.assertIn("LoadAudio", node_by_type)
+                self.assertIn("Comfyui-Kling-Wrapper Custom Voice Create", node_by_type)
+                self.assertIn("Comfyui-Kling-Wrapper Preview Audio", node_by_type)
+                self.assertNotIn("Comfyui-Kling-Wrapper TTS", node_by_type)
+
+                custom_voice_node = node_by_type["Comfyui-Kling-Wrapper Custom Voice Create"]
+                audio_input = next(
+                    node_input
+                    for node_input in custom_voice_node["inputs"]
+                    if node_input["name"] == "audio"
+                )
+                self.assertIsNotNone(audio_input["link"])
+                self.assertEqual(custom_voice_node["widgets_values"][1], "")
+
+                preview_audio_node = node_by_type["Comfyui-Kling-Wrapper Preview Audio"]
+                preview_audio_link = next(
+                    node_input["link"]
+                    for node_input in preview_audio_node["inputs"]
+                    if node_input["name"] == "audio_url"
+                )
+                source_link = next(link for link in data["links"] if link[0] == preview_audio_link)
+                self.assertEqual(source_link[2], 2)
 
 
 if __name__ == "__main__":

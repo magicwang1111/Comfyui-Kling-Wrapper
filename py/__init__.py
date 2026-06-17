@@ -2,7 +2,7 @@ from .api.capabilities import NODE_PREFIX
 from .nodes import AdvancedCustomElementCreateNode, AdvancedCustomElementQueryNode, EffectNode, ElementListBuilderNode, \
     Image2VideoNode, ImageExpanderNode, ImageGeneratorNode, KolorsVirtualTryOnNode, LipSyncAudioInputNode, \
     LipSyncNode, LipSyncTextInputNode, MotionControlNode, MultiImagesToVideoNode, PreviewAudio, PreviewVideo, Text2VideoNode, \
-    TextToAudioNode, Video2AudioNode, VideoExtendNode
+    TextToAudioNode, Video2AudioNode, VideoExtendNode, CustomVoiceCreateNode, CustomVoiceQueryNode, TTSNode
 
 
 def _node_name(label):
@@ -13,6 +13,9 @@ NODE_CLASS_MAPPINGS = {
     _node_name("Image Generator"): ImageGeneratorNode,
     _node_name("Image Expander"): ImageExpanderNode,
     _node_name("TextToAudio"): TextToAudioNode,
+    _node_name("TTS"): TTSNode,
+    _node_name("Custom Voice Create"): CustomVoiceCreateNode,
+    _node_name("Custom Voice Query"): CustomVoiceQueryNode,
     _node_name("Video2Audio"): Video2AudioNode,
     _node_name("Text2Video"): Text2VideoNode,
     _node_name("Image2Video"): Image2VideoNode,

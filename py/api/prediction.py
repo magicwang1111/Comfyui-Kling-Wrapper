@@ -160,6 +160,57 @@ class Video2AudioResponse(BaseModel):
     final_unit_deduction: float = None
 
 
+class TTSResponse(BaseModel):
+    class Result(BaseModel):
+        class AudioDescription(BaseModel):
+            id: str = None
+            url: str = None
+            duration: str = None
+
+        audios: List[AudioDescription] = []
+
+    task_id: str = None
+
+    task_status: str = None
+
+    task_status_msg: str = None
+
+    created_at: str = None
+
+    updated_at: str = None
+
+    task_result: Result = None
+
+    final_unit_deduction: float = None
+
+
+class CustomVoiceResponse(BaseModel):
+    class Result(BaseModel):
+        class VoiceDescription(BaseModel):
+            voice_id: str = None
+            voice_name: str = None
+            trial_url: str = None
+            owned_by: str = None
+
+        voices: List[VoiceDescription] = []
+
+    task_id: str = None
+
+    task_status: str = None
+
+    task_status_msg: str = None
+
+    task_info: dict = None
+
+    task_result: Result = None
+
+    final_unit_deduction: float = None
+
+    created_at: str = None
+
+    updated_at: str = None
+
+
 class MultiImage2VideoResponse(BaseModel):
     class Result(BaseModel):
         class VideosDescription(BaseModel):

@@ -1,6 +1,7 @@
 from .api import Client, ImageGenerator, ImageExpander, Image2Video, Video2Audio, Text2Audio, \
     Text2Video, CameraControl, CameraControlConfig, KolorsVurtualTryOn, VideoExtend, LipSync, LipSyncInput, EffectInput, \
-    Effects, MultiImages2Video, MultiModelVideoEdit, AdvancedCustomElements, MotionControl
+    Effects, MultiImages2Video, MultiModelVideoEdit, AdvancedCustomElements, MotionControl, CustomVoiceCreate, \
+    CustomVoiceQuery, TTS
 from .api.capabilities import DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, DEFAULT_VIDEO_ASPECT_RATIOS, \
     DEFAULT_VIDEO_DURATIONS, ELEMENT_LIST_TYPE, ELEMENT_TYPE, EXTENDED_IMAGE_ASPECT_RATIOS, IMAGE_GENERATION_MODELS, \
     IMAGE_TO_VIDEO_MODELS, LIPSYNC_INPUT_TYPE, MULTI_IMAGE_TO_VIDEO_MODELS, NODE_CATEGORY, NODE_PREFIX, SHOT_TYPES, \
@@ -441,6 +442,20 @@ def _clean_optional_text(value):
     return value or None
 
 
+def _contains_cjk_text(value):
+    return bool(re.search(r"[\u3400-\u9fff]", str(value or "")))
+
+
+def _normalize_tts_voice_language(text, voice_language):
+    voice_language = str(voice_language or "").strip() or "zh"
+    if _contains_cjk_text(text) and voice_language == "en":
+        print(f"[{NODE_PREFIX}] TTS text contains Chinese characters; using voice_language='zh' instead of 'en'.")
+        return "zh"
+    if voice_language not in {"zh", "en"}:
+        return "zh" if _contains_cjk_text(text) else "en"
+    return voice_language
+
+
 def _set_if_present(target, field_name, value):
     if value is not None:
         setattr(target, field_name, value)
@@ -671,6 +686,73 @@ def _extract_elements_from_response(data):
     if isinstance(data, dict) and data.get("element"):
         return [data["element"]]
     return []
+
+
+def _voice_result_to_payload(data):
+    if data is None:
+        return None
+    if hasattr(data, "dict"):
+        return data.dict(exclude_none=True)
+    if isinstance(data, dict):
+        return {key: value for key, value in data.items() if value is not None}
+    return {
+        key: value
+        for key, value in {
+            "voice_id": getattr(data, "voice_id", None),
+            "voice_name": getattr(data, "voice_name", None),
+            "trial_url": getattr(data, "trial_url", None),
+            "owned_by": getattr(data, "owned_by", None),
+        }.items()
+        if value is not None
+    }
+
+
+def _extract_custom_voice_result(response):
+    task_result = getattr(response, "task_result", None)
+    voices = getattr(task_result, "voices", None) if task_result is not None else None
+    if not voices:
+        task_status = getattr(response, "task_status", None)
+        task_status_msg = getattr(response, "task_status_msg", None)
+        details = "custom voice task did not return any voices."
+        if task_status:
+            details += f" task_status={task_status!r}."
+        if task_status_msg:
+            details += f" Details: {task_status_msg}"
+        raise ValueError(details)
+
+    payload = _voice_result_to_payload(voices[0]) or {}
+    if not payload.get("voice_id"):
+        raise ValueError("custom voice task completed but returned an empty voice_id.")
+    return payload
+
+
+def _extract_tts_audio_result(response):
+    task_result = getattr(response, "task_result", None)
+    audios = getattr(task_result, "audios", None) if task_result is not None else None
+    if not audios:
+        task_status = getattr(response, "task_status", None)
+        task_status_msg = getattr(response, "task_status_msg", None)
+        details = "tts task did not return any audios."
+        if task_status:
+            details += f" task_status={task_status!r}."
+        if task_status_msg:
+            details += f" Details: {task_status_msg}"
+        raise ValueError(details)
+
+    audio = audios[0]
+    if hasattr(audio, "dict"):
+        payload = audio.dict(exclude_none=True)
+    elif isinstance(audio, dict):
+        payload = {key: value for key, value in audio.items() if value is not None}
+    else:
+        payload = {
+            "id": getattr(audio, "id", None),
+            "url": getattr(audio, "url", None),
+            "duration": getattr(audio, "duration", None),
+        }
+    if not payload.get("url"):
+        raise ValueError("tts task completed but returned an empty audio URL.")
+    return payload
 
 
 def _load_audio_from_url(audio_url, save_directory, filename_prefix="audio"):
@@ -2085,6 +2167,19 @@ class PreviewAudio(LoadAudio):
     def VALIDATE_INPUTS(cls, **kwargs):
         return True
 
+    @classmethod
+    def fingerprint_inputs(cls, audio_url=None, filename_prefix=None, save_output=None, **kwargs):
+        return hashlib.sha256(
+            json.dumps(
+                {
+                    "audio_url": audio_url,
+                    "filename_prefix": filename_prefix,
+                    "save_output": save_output,
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+
     def run(self, audio_url, filename_prefix, save_output):
 
         try:
@@ -2923,3 +3018,220 @@ class TextToAudioNode:
         print(f"成功提取：audio_id={audio_id}, url_mp3={url_mp3}")
 
         return (audio_id, url_mp3)
+
+
+class CustomVoiceCreateNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "voice_name": ("STRING", {"multiline": False, "default": "Custom Voice"}),
+            },
+            "optional": {
+                "audio": ("AUDIO",),
+                "voice_file": ("STRING", {"multiline": False, "default": ""}),
+                "voice_url": ("STRING", {"multiline": False, "default": ""}),
+                "video_id": ("STRING", {"multiline": False, "default": ""}),
+                "external_task_id": ("STRING", {"multiline": False, "default": ""}),
+                "callback_url": ("STRING", {"multiline": False, "default": ""}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("voice_id", "voice_name", "trial_url", "task_id", "voice_json")
+    FUNCTION = "create"
+    OUTPUT_NODE = True
+    CATEGORY = NODE_CATEGORY
+
+    def create(
+            self,
+            voice_name,
+            audio=None,
+            voice_file="",
+            voice_url="",
+            video_id="",
+            external_task_id="",
+            callback_url="",
+    ):
+        voice_name = str(voice_name or "").strip()
+        if not voice_name:
+            raise ValueError("voice_name is required.")
+        if len(voice_name) > 20:
+            raise ValueError("voice_name must be 20 characters or fewer.")
+
+        voice_file = str(voice_file or "").strip()
+        voice_url = str(voice_url or "").strip()
+        video_id = str(video_id or "").strip()
+        external_task_id = str(external_task_id or "").strip()
+        callback_url = str(callback_url or "").strip()
+
+        sources = [
+            name for name, present in (
+                ("audio", audio is not None),
+                ("voice_file", bool(voice_file)),
+                ("voice_url", bool(voice_url)),
+                ("video_id", bool(video_id)),
+            )
+            if present
+        ]
+        if not sources:
+            raise ValueError("Provide audio, voice_file, voice_url, or video_id for custom voice creation.")
+        if len(sources) > 1:
+            raise ValueError("Provide only one of audio, voice_file, voice_url, or video_id for custom voice creation.")
+
+        generator = CustomVoiceCreate()
+        generator.voice_name = voice_name
+        if audio is not None:
+            generator.voice_url = _upload_audio_reference(audio)
+        elif voice_file:
+            generator.voice_url = _upload_file_to_temporary_media_host(voice_file)
+        elif voice_url:
+            if not _is_http_url(voice_url):
+                raise ValueError("voice_url must be an http(s) URL. Use audio or voice_file for local media.")
+            generator.voice_url = voice_url
+        else:
+            generator.video_id = video_id
+
+        if external_task_id:
+            generator.external_task_id = external_task_id
+        if callback_url:
+            generator.callback_url = callback_url
+
+        with _runtime_client() as client:
+            response = generator.run(client)
+        _log_final_unit_deduction(response, "custom_voice_create")
+        voice_payload = _extract_custom_voice_result(response)
+        task_id = getattr(response, "task_id", "") or ""
+        result_json = json.dumps(
+            {
+                "task_id": task_id,
+                "task_status": getattr(response, "task_status", None),
+                "task_status_msg": getattr(response, "task_status_msg", None),
+                "voice": voice_payload,
+            },
+            ensure_ascii=False,
+        )
+        return (
+            voice_payload.get("voice_id", ""),
+            voice_payload.get("voice_name", ""),
+            voice_payload.get("trial_url", ""),
+            task_id,
+            result_json,
+        )
+
+
+class CustomVoiceQueryNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "task_id_or_external_task_id": ("STRING", {"multiline": False, "default": ""}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("voice_id", "voice_name", "trial_url", "task_id", "voice_json")
+    FUNCTION = "query"
+    OUTPUT_NODE = True
+    CATEGORY = NODE_CATEGORY
+
+    def query(self, task_id_or_external_task_id):
+        identifier = str(task_id_or_external_task_id or "").strip()
+        if not identifier:
+            raise ValueError("task_id_or_external_task_id is required.")
+        generator = CustomVoiceQuery(identifier)
+        with _runtime_client() as client:
+            response = generator.run(client)
+        _log_final_unit_deduction(response, "custom_voice_query")
+        voice_payload = _extract_custom_voice_result(response)
+        task_id = getattr(response, "task_id", "") or ""
+        result_json = json.dumps(
+            {
+                "task_id": task_id,
+                "task_status": getattr(response, "task_status", None),
+                "task_status_msg": getattr(response, "task_status_msg", None),
+                "voice": voice_payload,
+            },
+            ensure_ascii=False,
+        )
+        return (
+            voice_payload.get("voice_id", ""),
+            voice_payload.get("voice_name", ""),
+            voice_payload.get("trial_url", ""),
+            task_id,
+            result_json,
+        )
+
+
+class TTSNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True, "default": ""}),
+                "voice_id": ("STRING", {"multiline": False, "default": ""}),
+                "voice_language": (["zh", "en"], {"default": "zh"}),
+                "voice_speed": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.8,
+                    "max": 2.0,
+                    "step": 0.1,
+                    "round": 0.1,
+                    "display": "number",
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("audio_id", "audio_url", "duration", "audio_json")
+    FUNCTION = "generate"
+    OUTPUT_NODE = True
+    CATEGORY = NODE_CATEGORY
+
+    def generate(self, text, voice_id, voice_language, voice_speed):
+        text = str(text or "").strip()
+        voice_id = str(voice_id or "").strip()
+        if not text:
+            raise ValueError("text is required.")
+        if len(text) > 1000:
+            raise ValueError("text must be 1000 characters or fewer.")
+        if not voice_id:
+            raise ValueError("voice_id is required.")
+
+        generator = TTS()
+        generator.text = text
+        generator.voice_id = voice_id
+        normalized_voice_language = _normalize_tts_voice_language(text, voice_language)
+        generator.voice_language = normalized_voice_language
+        generator.voice_speed = float(voice_speed)
+
+        try:
+            with _runtime_client() as client:
+                response = generator.run(client)
+        except KLingAPIError as exc:
+            if str(getattr(exc, "code", "")) == "1201" and "Voice id not found" in str(getattr(exc, "message", "")):
+                exc.message = (
+                    f"{exc.message}. Check that voice_language matches the selected voice/text language "
+                    f"(current voice_language={normalized_voice_language!r}). If this voice_id came from "
+                    "Custom Voice Create, Kling's /v1/audio/tts endpoint may not accept it; connect "
+                    "Custom Voice Create.trial_url to Preview Audio to audition the cloned voice, or use "
+                    "an official/preset voice_id for TTS."
+                )
+            raise
+        _log_final_unit_deduction(response, "tts")
+        audio_payload = _extract_tts_audio_result(response)
+        result_json = json.dumps(
+            {
+                "task_id": getattr(response, "task_id", None),
+                "task_status": getattr(response, "task_status", None),
+                "task_status_msg": getattr(response, "task_status_msg", None),
+                "audio": audio_payload,
+            },
+            ensure_ascii=False,
+        )
+        return (
+            audio_payload.get("id", ""),
+            audio_payload.get("url", ""),
+            str(audio_payload.get("duration", "") or ""),
+            result_json,
+        )

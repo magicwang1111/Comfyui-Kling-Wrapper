@@ -2,13 +2,14 @@
 
 Comfyui-Kling-Wrapper is a ComfyUI custom node pack for calling the Kling AI API directly inside ComfyUI.
 
-It bundles image generation, text-to-video, image-to-video, multi-image video, advanced custom elements, motion control, lip sync, text/video to audio, effects, virtual try-on, image expansion, and local preview helpers under the `Comfyui-Kling-Wrapper` category.
+It bundles image generation, text-to-video, image-to-video, multi-image video, advanced custom elements, motion control, lip sync, text/video to audio, TTS, custom voice creation, effects, virtual try-on, image expansion, and local preview helpers under the `Comfyui-Kling-Wrapper` category.
 
 ## Highlights
 
 - Direct Kling API access from ComfyUI workflows
 - New-system features such as `element_list`, advanced custom elements, reference video, and motion control
 - Built-in `voice_preset` dropdown for models that support native audio generation
+- Custom voice creation plus returned trial audio preview flow
 - Importable example workflows in [examples/README.md](./examples/README.md)
 
 ## Current model visibility
@@ -145,6 +146,9 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 - `Comfyui-Kling-Wrapper Lip Sync Audio Input`
 - `Comfyui-Kling-Wrapper Effects`
 - `Comfyui-Kling-Wrapper TextToAudio`
+- `Comfyui-Kling-Wrapper TTS`
+- `Comfyui-Kling-Wrapper Custom Voice Create`
+- `Comfyui-Kling-Wrapper Custom Voice Query`
 - `Comfyui-Kling-Wrapper Video2Audio`
 - `Comfyui-Kling-Wrapper Advanced Element Create`
 - `Comfyui-Kling-Wrapper Advanced Element Query`
@@ -160,6 +164,16 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 `Lip Sync` accepts generated `video_id`, public `video_url`, local `video_file`, ComfyUI `VIDEO`, or `video_frames` plus `video_info` from `VHS_LoadVideo`. Local video inputs are uploaded through the same temporary media relay used by motion control.
 
 For a Video Helper Suite workflow, connect `LoadAudio` -> `Lip Sync Audio Input.audio`, then connect `VHS_LoadVideo.IMAGE` -> `Lip Sync.video_frames` and `VHS_LoadVideo.video_info` -> `Lip Sync.video_info`.
+
+## Custom voice and TTS notes
+
+`Custom Voice Create` accepts one source at a time: a ComfyUI `AUDIO` input, a local `voice_file`, a public `voice_url`, or a Kling `video_id`. Local audio/files are uploaded through the same temporary media relay used by other media inputs.
+
+The custom voice API returns a reusable `voice_id` plus a `trial_url` when the task succeeds. To audition the cloned voice, connect `Custom Voice Create.trial_url` or `Custom Voice Query.trial_url` directly to `Preview Audio.audio_url`.
+
+Kling currently returns `Voice id not found` when a custom voice ID from `Custom Voice Create` is sent to `/v1/audio/tts`. Use `TTS` with official or preset voice IDs; use `trial_url` to preview custom voices.
+
+Kling requires clean single-speaker source media between 5 and 30 seconds for voice cloning.
 
 ## Motion control notes
 
@@ -204,6 +218,8 @@ The selected preset is converted to:
 
 These presets are mainly intended for models that support native audio generation on the active endpoint, especially `kling-v2-6`.
 
+For official or manually supplied preset voice IDs, use the dedicated `TTS` node. It calls `/v1/audio/tts` and returns an `audio_url` that can be saved or previewed with `Preview Audio`.
+
 ## Examples
 
 Example workflows and small Python snippets live in [examples/README.md](./examples/README.md).
@@ -213,6 +229,8 @@ The workflow JSON files no longer depend on a front-end `Client` node. Prepare `
 ## Official references
 
 - [Kling new-system API documentation](https://docs.qingque.cn/d/home/eZQAyImcbaS0fz-8ANjXvU5ed?identityId=2E1MlYrrPk4)
+- [Kling TTS API documentation](https://klingai.com/document-api/apiReference/model/TTS)
+- [Kling custom voice API documentation](https://klingai.com/document-api/apiReference/model/customVoices)
 - [Kling 3.0 series capability map](https://docs.qingque.cn/d/home/eZQCedMeoI1MTquS1SFRihz4S?identityId=1oEFzU43FYK)
 - [Kling V2.6 API documentation](https://docs.qingque.cn/d/home/eZQB6Bbl5WgW8eIVN--duPVl1?identityId=1oEFzU43FYK)
 - [Kling pricing](https://klingai.com/api/pricing)

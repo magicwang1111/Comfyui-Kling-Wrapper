@@ -14,3 +14,5 @@ from .text2audio import Text2Audio
 from .multi_elements_edit import MultiModelVideoEdit
 from .custom_elements import AdvancedCustomElements
 from .motion_control import MotionControl
+from .custom_voice import CustomVoiceCreate, CustomVoiceQuery
+from .tts import TTS

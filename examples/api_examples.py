@@ -2,7 +2,17 @@ import base64
 import os
 from pathlib import Path
 
-from py.api import AdvancedCustomElements, Client, Image2Video, ImageGenerator, MotionControl, MultiImages2Video, Text2Video
+from py.api import (
+    AdvancedCustomElements,
+    Client,
+    CustomVoiceCreate,
+    Image2Video,
+    ImageGenerator,
+    MotionControl,
+    MultiImages2Video,
+    TTS,
+    Text2Video,
+)
 
 
 def image_to_base64(path: str) -> str:
@@ -95,6 +105,22 @@ def example_motion_control(client: Client, image_path: str, reference_video_url:
     task.prompt = "Transfer the motion naturally while keeping the subject stable and realistic."
     task.mode = "pro"
     task.duration = "5"
+    return task.run(client)
+
+
+def example_create_custom_voice(client: Client, voice_url: str):
+    task = CustomVoiceCreate()
+    task.voice_name = "Demo Voice"
+    task.voice_url = voice_url
+    return task.run(client)
+
+
+def example_tts_with_voice_id(client: Client, voice_id: str):
+    task = TTS()
+    task.text = "这是一段用于测试克隆声音效果的短句。"
+    task.voice_id = voice_id
+    task.voice_language = "zh"
+    task.voice_speed = 1.0
     return task.run(client)
 
 
