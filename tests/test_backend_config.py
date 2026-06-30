@@ -112,6 +112,10 @@ class BackendConfigTests(unittest.TestCase):
 
         self.assertEqual([payload["sound"] for payload in captured_payloads], ["on", "off"])
 
+    def test_image2video_custom_voice_id_is_connectable(self):
+        custom_voice_input = kling_nodes.Image2VideoNode.INPUT_TYPES()["optional"]["custom_voice_id"]
+        self.assertTrue(custom_voice_input[1]["forceInput"])
+
     def test_non_4k_models_reject_4k_video_mode(self):
         with self.assertRaisesRegex(ValueError, "kling-v2-6 only supports modes: pro"):
             kling_capabilities.validate_video_generation_request(
@@ -141,15 +145,15 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(video_inputs["video_info"][0], "VHS_VIDEOINFO")
 
     def test_lip_sync_audio_input_accepts_comfy_audio(self):
-        fake_audio = {"waveform": object(), "sample_rate": 44100}
+        fake_audio = {"waveform": SimpleNamespace(shape=(1, 1, 132300)), "sample_rate": 44100}
 
         with mock.patch.object(kling_nodes, "_upload_audio_reference", return_value="https://example.com/audio.wav") as upload_mock:
             lip_sync_input, = kling_nodes.LipSyncAudioInputNode().run(audio=fake_audio)
 
         upload_mock.assert_called_once_with(fake_audio)
         self.assertEqual(lip_sync_input.mode, "audio2video")
-        self.assertEqual(lip_sync_input.audio_type, "url")
         self.assertEqual(lip_sync_input.audio_url, "https://example.com/audio.wav")
+        self.assertEqual(lip_sync_input.audio_duration_ms, 3000)
 
     def test_lip_sync_audio_input_uploads_audio_file(self):
         with mock.patch.object(
@@ -160,7 +164,6 @@ class BackendConfigTests(unittest.TestCase):
             lip_sync_input, = kling_nodes.LipSyncAudioInputNode().run(audio_file="D:/input/local-audio.wav")
 
         upload_mock.assert_called_once_with("D:/input/local-audio.wav")
-        self.assertEqual(lip_sync_input.audio_type, "url")
         self.assertEqual(lip_sync_input.audio_url, "https://example.com/local-audio.wav")
 
     def test_lip_sync_audio_input_rejects_multiple_sources(self):
@@ -424,97 +427,419 @@ class BackendConfigTests(unittest.TestCase):
         self.assertIn("Comfyui-Kling-Wrapper Custom Voice Create", kling_package.NODE_CLASS_MAPPINGS)
         self.assertIn("Comfyui-Kling-Wrapper Custom Voice Query", kling_package.NODE_CLASS_MAPPINGS)
         self.assertIn("Comfyui-Kling-Wrapper TTS", kling_package.NODE_CLASS_MAPPINGS)
+        self.assertIn("Comfyui-Kling-Wrapper Avatar", kling_package.NODE_CLASS_MAPPINGS)
+
+    def test_new_video_api_paths_match_official_endpoints(self):
+        self.assertEqual(kling_nodes.FaceIdentify()._request_path, "/v1/videos/identify-face")
+        self.assertEqual(kling_nodes.AdvancedLipSync()._request_path, "/v1/videos/advanced-lip-sync")
+        self.assertEqual(kling_nodes.Avatar()._request_path, "/v1/videos/avatar/image2video")
 
     def test_lip_sync_uploads_video_frames(self):
         sentinel_client = object()
+        captured = {}
 
         @contextmanager
         def fake_runtime_client():
             yield sentinel_client
 
-        class FakeLipSync:
-            last_instance = None
+        def fake_identify_run(generator, client):
+            captured["identify_client"] = client
+            captured["identify_payload"] = generator.to_dict()
+            return SimpleNamespace(
+                session_id="session-123",
+                face_data=[SimpleNamespace(face_id="face-0", start_time=0, end_time=5000)],
+            )
 
-            def __init__(self):
-                FakeLipSync.last_instance = self
-
-            def run(self, client):
-                self.seen_client = client
-                return SimpleNamespace(
-                    task_status="succeed",
-                    task_result=SimpleNamespace(
-                        videos=[SimpleNamespace(url="https://example.com/lipsync.mp4", id="video-123")]
-                    ),
-                )
+        def fake_advanced_run(generator, client):
+            captured["advanced_client"] = client
+            captured["advanced_payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_status="succeed",
+                task_result=SimpleNamespace(
+                    videos=[SimpleNamespace(url="https://example.com/lipsync.mp4", id="video-123")]
+                ),
+            )
 
         fake_frames = object()
         fake_info = {"loaded_fps": 25.0}
-        lip_sync_input = SimpleNamespace(mode="audio2video", audio_type="file", audio_file="encoded-audio")
+        lip_sync_input = SimpleNamespace(
+            mode="audio2video",
+            audio_url="https://example.com/audio.wav",
+            audio_duration_ms=3000,
+            sound_start_time=0,
+            sound_end_time=0,
+        )
 
         with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
-            with mock.patch.object(kling_nodes, "LipSync", FakeLipSync):
-                with mock.patch.object(
-                    kling_nodes,
-                    "_upload_reference_video_frames",
-                    return_value="https://tmpfiles.org/dl/123/source.mp4",
-                ) as upload_mock:
-                    url, video_id = kling_nodes.LipSyncNode().run(
-                        lip_sync_input,
-                        face_id="",
-                        video_frames=fake_frames,
-                        video_info=fake_info,
-                    )
+            with mock.patch.object(kling_nodes.FaceIdentify, "run", fake_identify_run):
+                with mock.patch.object(kling_nodes.AdvancedLipSync, "run", fake_advanced_run):
+                    with mock.patch.object(
+                        kling_nodes,
+                        "_upload_reference_video_frames",
+                        return_value="https://tmpfiles.org/dl/123/source.mp4",
+                    ) as upload_mock:
+                        url, video_id = kling_nodes.LipSyncNode().run(
+                            lip_sync_input,
+                            face_id="",
+                            video_frames=fake_frames,
+                            video_info=fake_info,
+                        )
 
         upload_mock.assert_called_once_with(fake_frames, fake_info)
         self.assertEqual(url, "https://example.com/lipsync.mp4")
         self.assertEqual(video_id, "video-123")
-        self.assertEqual(FakeLipSync.last_instance.input.video_id, "")
-        self.assertEqual(FakeLipSync.last_instance.input.video_url, "https://tmpfiles.org/dl/123/source.mp4")
-        self.assertEqual(FakeLipSync.last_instance.seen_client, sentinel_client)
+        self.assertEqual(
+            captured["identify_payload"],
+            {"video_url": "https://tmpfiles.org/dl/123/source.mp4"},
+        )
+        self.assertEqual(captured["identify_client"], sentinel_client)
+        self.assertEqual(captured["advanced_client"], sentinel_client)
+        self.assertEqual(
+            captured["advanced_payload"],
+            {
+                "session_id": "session-123",
+                "face_choose": [
+                    {
+                        "face_id": "face-0",
+                        "sound_file": "https://example.com/audio.wav",
+                        "sound_start_time": 0,
+                        "sound_end_time": 3000,
+                        "sound_insert_time": 0,
+                        "sound_volume": 1.0,
+                        "original_audio_volume": 1.0,
+                    }
+                ],
+            },
+        )
 
     def test_lip_sync_uploads_video_input_object(self):
         sentinel_client = object()
+        captured = {}
 
         @contextmanager
         def fake_runtime_client():
             yield sentinel_client
 
-        class FakeLipSync:
-            last_instance = None
+        def fake_identify_run(generator, client):
+            captured["identify_payload"] = generator.to_dict()
+            return SimpleNamespace(
+                session_id="session-456",
+                face_data=[
+                    SimpleNamespace(face_id="face-0", start_time=0, end_time=5000),
+                    SimpleNamespace(face_id="face-1", start_time=1000, end_time=6000),
+                ],
+            )
 
-            def __init__(self):
-                FakeLipSync.last_instance = self
-
-            def run(self, client):
-                self.seen_client = client
-                return SimpleNamespace(
-                    task_status="succeed",
-                    task_result=SimpleNamespace(
-                        videos=[SimpleNamespace(url="https://example.com/lipsync.mp4", id="video-456")]
-                    ),
-                )
+        def fake_advanced_run(generator, client):
+            captured["advanced_payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_status="succeed",
+                task_result=SimpleNamespace(
+                    videos=[SimpleNamespace(url="https://example.com/lipsync.mp4", id="video-456")]
+                ),
+            )
 
         fake_video = object()
-        lip_sync_input = SimpleNamespace(mode="audio2video", audio_type="file", audio_file="encoded-audio")
+        lip_sync_input = SimpleNamespace(
+            mode="audio2video",
+            audio_id="audio-123",
+            sound_start_time=0,
+            sound_end_time=3000,
+        )
 
         with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
-            with mock.patch.object(kling_nodes, "LipSync", FakeLipSync):
-                with mock.patch.object(
-                    kling_nodes,
-                    "_upload_video_reference",
-                    return_value="https://tmpfiles.org/dl/456/source.mp4",
-                ) as upload_mock:
-                    url, video_id = kling_nodes.LipSyncNode().run(
-                        lip_sync_input,
-                        face_id="face-1",
-                        video_input=fake_video,
-                    )
+            with mock.patch.object(kling_nodes.FaceIdentify, "run", fake_identify_run):
+                with mock.patch.object(kling_nodes.AdvancedLipSync, "run", fake_advanced_run):
+                    with mock.patch.object(
+                        kling_nodes,
+                        "_upload_video_reference",
+                        return_value="https://tmpfiles.org/dl/456/source.mp4",
+                    ) as upload_mock:
+                        url, video_id = kling_nodes.LipSyncNode().run(
+                            lip_sync_input,
+                            face_id="face-1",
+                            video_input=fake_video,
+                            sound_insert_time_ms=1000,
+                            sound_volume=1.5,
+                            original_audio_volume=0.5,
+                        )
 
         upload_mock.assert_called_once_with(fake_video)
         self.assertEqual(url, "https://example.com/lipsync.mp4")
         self.assertEqual(video_id, "video-456")
-        self.assertEqual(FakeLipSync.last_instance.input.video_url, "https://tmpfiles.org/dl/456/source.mp4")
-        self.assertEqual(FakeLipSync.last_instance.input.face_id, "face-1")
+        self.assertEqual(
+            captured["identify_payload"],
+            {"video_url": "https://tmpfiles.org/dl/456/source.mp4"},
+        )
+        self.assertEqual(captured["advanced_payload"]["face_choose"][0]["face_id"], "face-1")
+        self.assertEqual(captured["advanced_payload"]["face_choose"][0]["audio_id"], "audio-123")
+        self.assertEqual(captured["advanced_payload"]["face_choose"][0]["sound_insert_time"], 1000)
+        self.assertEqual(captured["advanced_payload"]["face_choose"][0]["sound_volume"], 1.5)
+        self.assertEqual(captured["advanced_payload"]["face_choose"][0]["original_audio_volume"], 0.5)
+
+    def test_lip_sync_text_input_runs_tts_before_advanced_lip_sync(self):
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield object()
+
+        def fake_identify_run(generator, client):
+            return SimpleNamespace(
+                session_id="session-text",
+                face_data=[SimpleNamespace(face_id="face-0", start_time=0, end_time=5000)],
+            )
+
+        def fake_tts_run(generator, client):
+            captured["tts_payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_result=SimpleNamespace(
+                    audios=[SimpleNamespace(id="audio-text", url="https://example.com/text.mp3", duration="3.0")]
+                )
+            )
+
+        def fake_advanced_run(generator, client):
+            captured["advanced_payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_result=SimpleNamespace(
+                    videos=[SimpleNamespace(url="https://example.com/text.mp4", id="video-text")]
+                )
+            )
+
+        lip_sync_input, = kling_nodes.LipSyncTextInputNode().run(
+            text="Hello",
+            voice_id="The Reader",
+            voice_language="en",
+            voice_speed=1.0,
+        )
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.FaceIdentify, "run", fake_identify_run):
+                with mock.patch.object(kling_nodes.TTS, "run", fake_tts_run):
+                    with mock.patch.object(kling_nodes.AdvancedLipSync, "run", fake_advanced_run):
+                        url, video_id = kling_nodes.LipSyncNode().run(
+                            lip_sync_input,
+                            face_id="",
+                            video_id="video-source",
+                        )
+
+        self.assertEqual(url, "https://example.com/text.mp4")
+        self.assertEqual(video_id, "video-text")
+        self.assertEqual(captured["tts_payload"]["text"], "Hello")
+        self.assertEqual(captured["advanced_payload"]["face_choose"][0]["audio_id"], "audio-text")
+
+    def test_lip_sync_rejects_unknown_face_id(self):
+        @contextmanager
+        def fake_runtime_client():
+            yield object()
+
+        def fake_identify_run(generator, client):
+            return SimpleNamespace(
+                session_id="session-123",
+                face_data=[SimpleNamespace(face_id="face-0", start_time=0, end_time=5000)],
+            )
+
+        lip_sync_input = SimpleNamespace(
+            mode="audio2video",
+            audio_id="audio-123",
+            sound_start_time=0,
+            sound_end_time=3000,
+        )
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.FaceIdentify, "run", fake_identify_run):
+                with self.assertRaisesRegex(ValueError, "was not returned"):
+                    kling_nodes.LipSyncNode().run(
+                        lip_sync_input,
+                        face_id="missing-face",
+                        video_id="video-source",
+                    )
+
+    def test_avatar_builds_uploaded_audio_payload(self):
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield object()
+
+        def fake_avatar_run(generator, client):
+            captured["payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_result=SimpleNamespace(
+                    videos=[SimpleNamespace(url="https://example.com/avatar.mp4", id="avatar-123")]
+                )
+            )
+
+        fake_audio = {"waveform": SimpleNamespace(shape=(1, 1, 132300)), "sample_rate": 44100}
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_upload_audio_reference",
+                    return_value="https://example.com/avatar.wav",
+                ):
+                    with mock.patch.object(kling_nodes.Avatar, "run", fake_avatar_run):
+                        url, video_id = kling_nodes.AvatarNode().generate(
+                            image=object(),
+                            mode="std",
+                            audio=fake_audio,
+                            prompt="Smile and speak naturally.",
+                        )
+
+        self.assertEqual(url, "https://example.com/avatar.mp4")
+        self.assertEqual(video_id, "avatar-123")
+        self.assertEqual(
+            captured["payload"],
+            {
+                "image": "encoded-image",
+                "mode": "std",
+                "prompt": "Smile and speak naturally.",
+                "sound_file": "https://example.com/avatar.wav",
+            },
+        )
+
+    def test_avatar_rejects_multiple_audio_sources(self):
+        with self.assertRaisesRegex(ValueError, "Provide only one"):
+            kling_nodes.AvatarNode().generate(
+                image=object(),
+                mode="std",
+                audio_id="audio-123",
+                audio_url="https://example.com/audio.mp3",
+            )
+
+    def test_avatar_rejects_out_of_range_comfy_audio_duration(self):
+        short_audio = {"waveform": SimpleNamespace(shape=(1, 1, 44100)), "sample_rate": 44100}
+        with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
+            with self.assertRaisesRegex(ValueError, "between 2 and 300 seconds"):
+                kling_nodes.AvatarNode().generate(
+                    image=object(),
+                    mode="std",
+                    audio=short_audio,
+                )
+
+    def test_image2video_custom_voice_builds_voice_list(self):
+        captured = {}
+
+        @contextmanager
+        def fake_runtime_client():
+            yield object()
+
+        def fake_run(generator, client):
+            captured["payload"] = generator.to_dict()
+            return SimpleNamespace(
+                task_result=SimpleNamespace(
+                    videos=[SimpleNamespace(url="https://example.com/video.mp4", id="video-voice")]
+                )
+            )
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
+                with mock.patch.object(kling_nodes.Image2Video, "run", fake_run):
+                    url, video_id = kling_nodes.Image2VideoNode().generate(
+                        model="kling-v2-6",
+                        image=object(),
+                        prompt='The person <<<voice_1>>> says: "Hello."',
+                        mode="pro",
+                        duration="5",
+                        sound="on",
+                        custom_voice_id="voice-custom",
+                    )
+
+        self.assertEqual(url, "https://example.com/video.mp4")
+        self.assertEqual(video_id, "video-voice")
+        self.assertEqual(captured["payload"]["voice_list"], [{"voice_id": "voice-custom"}])
+
+    def test_image2video_custom_voice_validates_required_contract(self):
+        common = {
+            "model": "kling-v2-6",
+            "image": object(),
+            "mode": "pro",
+            "duration": "5",
+            "custom_voice_id": "voice-custom",
+        }
+        with self.assertRaisesRegex(ValueError, "requires sound='on'"):
+            kling_nodes.Image2VideoNode().generate(
+                prompt="The person speaks.",
+                sound="off",
+                **common,
+            )
+        with self.assertRaisesRegex(ValueError, "prompt marker"):
+            kling_nodes.Image2VideoNode().generate(
+                prompt="The person speaks.",
+                sound="on",
+                **common,
+            )
+        with self.assertRaisesRegex(ValueError, "cannot be used together with element_list"):
+            kling_nodes.Image2VideoNode().generate(
+                prompt="The person <<<voice_1>>> speaks.",
+                sound="on",
+                element_list=[{"element_id": "element-123"}],
+                **common,
+            )
+        with self.assertRaisesRegex(ValueError, "custom_voice_id or voice_preset"):
+            kling_nodes.Image2VideoNode().generate(
+                prompt="The person <<<voice_1>>> speaks.",
+                sound="on",
+                voice_preset="The Reader",
+                **common,
+            )
+
+    def test_image2video_custom_voice_rejects_kling_v3(self):
+        with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
+            with self.assertRaisesRegex(ValueError, "does not support voice_list"):
+                kling_nodes.Image2VideoNode().generate(
+                    model="kling-v3",
+                    image=object(),
+                    prompt='The person <<<voice_1>>> says: "Hello."',
+                    mode="pro",
+                    duration="5",
+                    sound="on",
+                    custom_voice_id="voice-custom",
+                )
+
+    def test_image2video_surfaces_failed_task_details(self):
+        @contextmanager
+        def fake_runtime_client():
+            yield object()
+
+        failed_response = SimpleNamespace(
+            task_id="task-failed",
+            task_status="failed",
+            task_status_msg="The input parameters are not correct",
+            task_result=SimpleNamespace(videos=[]),
+            final_unit_deduction=0,
+        )
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
+                with mock.patch.object(
+                    kling_nodes.Image2Video,
+                    "run",
+                    return_value=failed_response,
+                ):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "task-failed.*The input parameters are not correct",
+                    ):
+                        kling_nodes.Image2VideoNode().generate(
+                            model="kling-v2-6",
+                            image=object(),
+                            prompt='The person <<<voice_1>>> says: "Hello."',
+                            mode="pro",
+                            duration="5",
+                            sound="on",
+                            custom_voice_id="voice-custom",
+                        )
+
+    def test_example_workflow_links_target_valid_input_slots(self):
+        workflow_paths = sorted((REPO_ROOT / "examples").glob("*.json"))
+        self.assertGreaterEqual(len(workflow_paths), 20)
+        for workflow_path in workflow_paths:
+            with self.subTest(filename=workflow_path.name):
+                data = json.loads(workflow_path.read_text(encoding="utf-8"))
+                nodes_by_id = {node["id"]: node for node in data["nodes"]}
+                for link_id, _, _, destination_id, destination_slot, _ in data["links"]:
+                    destination_inputs = nodes_by_id[destination_id].get("inputs", [])
+                    self.assertLess(destination_slot, len(destination_inputs))
+                    self.assertEqual(destination_inputs[destination_slot].get("link"), link_id)
 
     def test_runtime_client_prefers_config_local_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:

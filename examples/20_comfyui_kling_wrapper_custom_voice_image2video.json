@@ -33,19 +33,19 @@
         "Node name for S&R": "LoadAudio"
       },
       "widgets_values": [
-        "example_lipsync_audio.wav"
+        "example_voice_reference.mp3"
       ]
     },
     {
       "id": 2,
-      "type": "LoadVideo",
+      "type": "LoadImage",
       "pos": [
         40,
-        300
+        360
       ],
       "size": [
-        320,
-        120
+        290,
+        340
       ],
       "flags": {},
       "order": 1,
@@ -53,31 +53,38 @@
       "inputs": [],
       "outputs": [
         {
-          "name": "VIDEO",
-          "type": "VIDEO",
+          "name": "IMAGE",
+          "type": "IMAGE",
           "links": [
-            3
+            2
           ],
           "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "slot_index": 1
         }
       ],
       "properties": {
-        "Node name for S&R": "LoadVideo"
+        "Node name for S&R": "LoadImage"
       },
       "widgets_values": [
-        "example_lipsync_source.mp4"
+        "example_talking_portrait.png",
+        "image"
       ]
     },
     {
       "id": 3,
-      "type": "Comfyui-Kling-Wrapper Lip Sync Audio Input",
+      "type": "Comfyui-Kling-Wrapper Custom Voice Create",
       "pos": [
         420,
         40
       ],
       "size": [
-        360,
-        240
+        390,
+        260
       ],
       "flags": {},
       "order": 2,
@@ -91,48 +98,80 @@
       ],
       "outputs": [
         {
-          "name": "input",
-          "type": "COMFYUI_KLING_WRAPPER_LIPSYNC_INPUT",
+          "name": "voice_id",
+          "type": "STRING",
           "links": [
-            2
+            3
           ],
           "slot_index": 0
+        },
+        {
+          "name": "voice_name",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        },
+        {
+          "name": "trial_url",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 2
+        },
+        {
+          "name": "task_id",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 3
+        },
+        {
+          "name": "voice_json",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 4
         }
       ],
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Lip Sync Audio Input"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Custom Voice Create"
       },
       "widgets_values": [
+        "Demo Voice",
         "",
         "",
         "",
-        0,
-        0
+        "",
+        ""
       ]
     },
     {
       "id": 4,
-      "type": "Comfyui-Kling-Wrapper Lip Sync",
+      "type": "Comfyui-Kling-Wrapper Image2Video",
       "pos": [
         860,
-        180
+        260
       ],
       "size": [
-        390,
-        220
+        430,
+        520
       ],
       "flags": {},
       "order": 3,
       "mode": 0,
       "inputs": [
         {
-          "name": "input",
-          "type": "COMFYUI_KLING_WRAPPER_LIPSYNC_INPUT",
-          "link": 2
+          "name": "image",
+          "type": "IMAGE",
+          "link": 2,
+          "shape": 7
         },
         {
-          "name": "video_input",
-          "type": "VIDEO",
+          "name": "image_tail",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "custom_voice_id",
+          "type": "STRING",
           "link": 3
         }
       ],
@@ -153,24 +192,30 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Lip Sync"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Image2Video"
       },
       "widgets_values": [
+        "kling-v2-6",
+        "The portrait subject <<<voice_1>>> says: \"Welcome to this custom voice demonstration.\"",
         "",
-        "",
-        "",
-        "",
-        0,
-        1.0,
-        1.0
+        0.5,
+        "pro",
+        "10",
+        "None",
+        "horizontal",
+        0.5,
+        "on",
+        "None",
+        "single",
+        ""
       ]
     },
     {
       "id": 5,
       "type": "Comfyui-Kling-Wrapper Preview Video",
       "pos": [
-        1340,
-        180
+        1380,
+        260
       ],
       "size": [
         430,
@@ -211,19 +256,19 @@
     ],
     [
       2,
-      3,
-      0,
-      4,
-      0,
-      "COMFYUI_KLING_WRAPPER_LIPSYNC_INPUT"
-    ],
-    [
-      3,
       2,
       0,
       4,
-      1,
-      "VIDEO"
+      0,
+      "IMAGE"
+    ],
+    [
+      3,
+      3,
+      0,
+      4,
+      2,
+      "STRING"
     ],
     [
       4,

@@ -3,9 +3,12 @@ import os
 from pathlib import Path
 
 from py.api import (
+    AdvancedLipSync,
     AdvancedCustomElements,
+    Avatar,
     Client,
     CustomVoiceCreate,
+    FaceIdentify,
     Image2Video,
     ImageGenerator,
     MotionControl,
@@ -112,6 +115,53 @@ def example_create_custom_voice(client: Client, voice_url: str):
     task = CustomVoiceCreate()
     task.voice_name = "Demo Voice"
     task.voice_url = voice_url
+    return task.run(client)
+
+
+def example_avatar(client: Client, image_path: str, audio_url: str):
+    task = Avatar()
+    task.image = image_to_base64(image_path)
+    task.sound_file = audio_url
+    task.prompt = "Speak naturally with subtle head movement and a friendly expression."
+    task.mode = "std"
+    return task.run(client)
+
+
+def example_advanced_lip_sync(client: Client, video_url: str, audio_url: str, audio_duration_ms: int):
+    identify = FaceIdentify()
+    identify.video_url = video_url
+    face_result = identify.run(client)
+    if not face_result.face_data:
+        raise ValueError("No face was detected in the source video.")
+
+    task = AdvancedLipSync()
+    task.session_id = face_result.session_id
+    task.face_choose = [{
+        "face_id": face_result.face_data[0].face_id,
+        "sound_file": audio_url,
+        "sound_start_time": 0,
+        "sound_end_time": audio_duration_ms,
+        "sound_insert_time": 0,
+        "sound_volume": 1.0,
+        "original_audio_volume": 1.0,
+    }]
+    return task.run(client)
+
+
+def example_image2video_with_custom_voice(
+        client: Client,
+        image_path: str,
+        voice_id: str,
+        dialogue: str,
+):
+    task = Image2Video()
+    task.model_name = "kling-v2-6"
+    task.image = image_to_base64(image_path)
+    task.prompt = f'Portrait subject <<<voice_1>>> says: "{dialogue}"'
+    task.mode = "pro"
+    task.duration = "10"
+    task.sound = "on"
+    task.voice_list = [{"voice_id": voice_id}]
     return task.run(client)
 
 

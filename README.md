@@ -2,7 +2,7 @@
 
 Comfyui-Kling-Wrapper is a ComfyUI custom node pack for calling the Kling AI API directly inside ComfyUI.
 
-It bundles image generation, text-to-video, image-to-video, multi-image video, advanced custom elements, motion control, lip sync, text/video to audio, TTS, custom voice creation, effects, virtual try-on, image expansion, and local preview helpers under the `Comfyui-Kling-Wrapper` category.
+It bundles image generation, text-to-video, image-to-video, multi-image video, advanced custom elements, motion control, advanced lip sync, Avatar image-to-video, text/video to audio, TTS, custom voice creation, effects, virtual try-on, image expansion, and local preview helpers under the `Comfyui-Kling-Wrapper` category.
 
 ## Highlights
 
@@ -64,8 +64,8 @@ Documented newer models such as `kling-image-o1`, `kling-video-o1`, and `kling-v
 ## Important limitations
 
 - Native 4K video output is exposed through the video `mode` dropdown. Models that do not support `mode=4k` will be rejected by the node capability checks before submission.
-- Native `sound` and `voice_preset` support is currently only verified for `kling-v2-6` on the active endpoint.
-- `kling-v3`, `kling-v3-omni`, and `kling-video-o1` may appear in official docs, but the current public endpoint does not expose native sound control for them through this plugin.
+- Native preset and cloned voices are available for `kling-v2-6`; `Image2Video.custom_voice_id` sends cloned voice control through `voice_list`. The active API rejects this field for `kling-v3`.
+- `kling-v3-omni` and `kling-video-o1` remain hidden until live endpoint support is confirmed for normal accounts.
 - `Advanced Element Create` requires 1 frontal subject image plus 1-3 additional reference images of the same subject. Background images do not count as reference images.
 - `Advanced Element Create` also enforces `element_name <= 20` characters and `element_description <= 100` characters.
 - If you need both strong subject consistency and voiced output, the reliable flow on the current endpoint is usually: generate the bound subject video first, then add speech with `Lip Sync`, `TextToAudio`, or `Video2Audio`.
@@ -144,6 +144,7 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 - `Comfyui-Kling-Wrapper Lip Sync`
 - `Comfyui-Kling-Wrapper Lip Sync Text Input`
 - `Comfyui-Kling-Wrapper Lip Sync Audio Input`
+- `Comfyui-Kling-Wrapper Avatar`
 - `Comfyui-Kling-Wrapper Effects`
 - `Comfyui-Kling-Wrapper TextToAudio`
 - `Comfyui-Kling-Wrapper TTS`
@@ -159,11 +160,19 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 
 ## Lip sync notes
 
-`Lip Sync Audio Input` accepts a ComfyUI `AUDIO` connection directly, plus the older `audio_file` and `audio_url` fields. Connected or local audio is uploaded through the same temporary media relay used by video inputs, then submitted to Kling as `audio_url`.
+`Lip Sync` now calls `/v1/videos/identify-face` followed by `/v1/videos/advanced-lip-sync`. Leave `face_id` empty to select the first detected face, or enter a returned face ID explicitly.
+
+`Lip Sync Audio Input` accepts exactly one of a ComfyUI `AUDIO` connection, Kling `audio_id`, local `audio_file`, or public `audio_url`. ComfyUI audio supplies its duration automatically; URL, file, and ID inputs must provide `sound_end_time_ms` when the duration cannot be inferred.
 
 `Lip Sync` accepts generated `video_id`, public `video_url`, local `video_file`, ComfyUI `VIDEO`, or `video_frames` plus `video_info` from `VHS_LoadVideo`. Local video inputs are uploaded through the same temporary media relay used by motion control.
 
 For a Video Helper Suite workflow, connect `LoadAudio` -> `Lip Sync Audio Input.audio`, then connect `VHS_LoadVideo.IMAGE` -> `Lip Sync.video_frames` and `VHS_LoadVideo.video_info` -> `Lip Sync.video_info`.
+
+`Lip Sync Text Input` remains supported. The node first creates preset-voice audio through `/v1/audio/tts`, then sends the resulting `audio_id` to Advanced Lip Sync.
+
+## Avatar notes
+
+`Avatar` calls `/v1/videos/avatar/image2video` with one ComfyUI `IMAGE` and exactly one of `AUDIO`, `audio_id`, `audio_file`, or `audio_url`. Local ComfyUI audio is validated to be between 2 and 300 seconds before submission.
 
 ## Custom voice and TTS notes
 
@@ -174,6 +183,8 @@ The custom voice API returns a reusable `voice_id` plus a `trial_url` when the t
 Kling currently returns `Voice id not found` when a custom voice ID from `Custom Voice Create` is sent to `/v1/audio/tts`. Use `TTS` with official or preset voice IDs; use `trial_url` to preview custom voices.
 
 Kling requires clean single-speaker source media between 5 and 30 seconds for voice cloning.
+
+Connect `Custom Voice Create.voice_id` to `Image2Video.custom_voice_id` and select `kling-v2-6` to use the cloned voice. Set `mode=pro`, `sound=on`, use a 5- or 10-second duration, and reference the voice as `<<<voice_1>>>` in the prompt. Custom voice mode rejects simultaneous `voice_preset` or `element_list` input.
 
 ## Motion control notes
 
@@ -208,7 +219,7 @@ When `duration` is set to `auto`, the node tries to match the uploaded reference
 
 ## Voice presets
 
-`Text2Video` and `Image2Video` expose a `voice_preset` dropdown instead of requiring manual `voice_list` JSON.
+`Text2Video` and `Image2Video` expose a `voice_preset` dropdown. `Image2Video` additionally accepts a connected `custom_voice_id`.
 
 The selected preset is converted to:
 
@@ -231,6 +242,9 @@ The workflow JSON files no longer depend on a front-end `Client` node. Prepare `
 - [Kling new-system API documentation](https://docs.qingque.cn/d/home/eZQAyImcbaS0fz-8ANjXvU5ed?identityId=2E1MlYrrPk4)
 - [Kling TTS API documentation](https://klingai.com/document-api/apiReference/model/TTS)
 - [Kling custom voice API documentation](https://klingai.com/document-api/apiReference/model/customVoices)
+- [Kling advanced lip-sync API documentation](https://klingai.com/document-api/api/video/lip-sync)
+- [Kling Avatar API documentation](https://klingai.com/document-api/api/video/avatar)
+- [Kling 3.0 custom voice documentation](https://klingai.com/document-api/api/video/3-0-omni/voice-customization)
 - [Kling 3.0 series capability map](https://docs.qingque.cn/d/home/eZQCedMeoI1MTquS1SFRihz4S?identityId=1oEFzU43FYK)
 - [Kling V2.6 API documentation](https://docs.qingque.cn/d/home/eZQB6Bbl5WgW8eIVN--duPVl1?identityId=1oEFzU43FYK)
 - [Kling pricing](https://klingai.com/api/pricing)

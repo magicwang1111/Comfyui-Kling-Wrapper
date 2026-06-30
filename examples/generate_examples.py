@@ -66,6 +66,7 @@ def strip_client_dependency(data):
     client_node_type = f"{NODE_PREFIX} Client"
     removed_link_ids = set()
     removed_node_ids = set()
+    input_index_maps = {}
     cleaned_nodes = []
 
     for workflow_node in data["nodes"]:
@@ -74,11 +75,13 @@ def strip_client_dependency(data):
             continue
 
         cleaned_inputs = []
-        for node_input in workflow_node.get("inputs", []):
+        input_index_maps[workflow_node["id"]] = {}
+        for old_index, node_input in enumerate(workflow_node.get("inputs", [])):
             if node_input.get("type") == CLIENT_TYPE or node_input.get("name") == "client":
                 if node_input.get("link") is not None:
                     removed_link_ids.add(node_input["link"])
                 continue
+            input_index_maps[workflow_node["id"]][old_index] = len(cleaned_inputs)
             cleaned_inputs.append(node_input)
 
         workflow_node["inputs"] = cleaned_inputs
@@ -90,7 +93,10 @@ def strip_client_dependency(data):
         if link_type == CLIENT_TYPE or src_node in removed_node_ids or dst_node in removed_node_ids:
             removed_link_ids.add(link_id)
             continue
-        cleaned_links.append(workflow_link)
+        cleaned_link = list(workflow_link)
+        destination_map = input_index_maps.get(dst_node, {})
+        cleaned_link[4] = destination_map.get(cleaned_link[4], cleaned_link[4])
+        cleaned_links.append(cleaned_link)
 
     for workflow_node in cleaned_nodes:
         for node_input in workflow_node.get("inputs", []):
@@ -262,8 +268,19 @@ def text2video_node(node_id, pos, order, model, prompt, mode="pro", aspect_ratio
     )
 
 
-def image2video_node(node_id, pos, order, model, prompt="", mode="pro", duration="5", shot_type="single",
-                     reference_video=""):
+def image2video_node(
+        node_id,
+        pos,
+        order,
+        model,
+        prompt="",
+        mode="pro",
+        duration="5",
+        shot_type="single",
+        reference_video="",
+        sound="off",
+        voice_preset="None",
+):
     type_name = f"{NODE_PREFIX} Image2Video"
     return node(
         node_id,
@@ -281,8 +298,8 @@ def image2video_node(node_id, pos, order, model, prompt="", mode="pro", duration
             "None",
             "horizontal",
             0.5,
-            "off",
-            "None",
+            sound,
+            voice_preset,
             shot_type,
             reference_video,
         ],
@@ -290,6 +307,7 @@ def image2video_node(node_id, pos, order, model, prompt="", mode="pro", duration
             input_slot("client", CLIENT_TYPE),
             input_slot("image", "IMAGE"),
             input_slot("image_tail", "IMAGE", None),
+            input_slot("custom_voice_id", "STRING", None),
         ],
         outputs=[
             output_slot("url", "STRING", slot_index=0),
@@ -488,6 +506,20 @@ def lip_sync_text_input_node(node_id, pos, order):
     )
 
 
+def lip_sync_audio_input_node(node_id, pos, order):
+    type_name = f"{NODE_PREFIX} Lip Sync Audio Input"
+    return node(
+        node_id,
+        type_name,
+        pos,
+        [360, 240],
+        order,
+        ["", "", "", 0, 0],
+        inputs=[input_slot("audio", "AUDIO")],
+        outputs=[output_slot("input", LIPSYNC_INPUT_TYPE, slot_index=0)],
+    )
+
+
 def lip_sync_node(node_id, pos, order):
     type_name = f"{NODE_PREFIX} Lip Sync"
     return node(
@@ -496,11 +528,31 @@ def lip_sync_node(node_id, pos, order):
         pos,
         [390, 220],
         order,
-        ["", "", ""],
+        ["", "", "", "", 0, 1.0, 1.0],
         inputs=[
             input_slot("client", CLIENT_TYPE),
             input_slot("input", LIPSYNC_INPUT_TYPE),
             input_slot("video_id", "STRING"),
+        ],
+        outputs=[
+            output_slot("url", "STRING", slot_index=0),
+            output_slot("video_id", "STRING", slot_index=1),
+        ],
+    )
+
+
+def avatar_node(node_id, pos, order):
+    type_name = f"{NODE_PREFIX} Avatar"
+    return node(
+        node_id,
+        type_name,
+        pos,
+        [420, 320],
+        order,
+        ["std", "", "", "", "Speak naturally with subtle head movement and a friendly expression."],
+        inputs=[
+            input_slot("image", "IMAGE"),
+            input_slot("audio", "AUDIO"),
         ],
         outputs=[
             output_slot("url", "STRING", slot_index=0),
@@ -624,7 +676,7 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - You can copy `config.example.json` in the repository root as a starting template.
 - Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, `example_scene.png`, `example_lipsync_source.mp4`, `example_lipsync_audio.wav`, and `example_voice_reference.mp3` with files that exist in your ComfyUI input directory.
 - Replace placeholder URLs such as `https://example.com/reference-motion.mp4` with real URLs when needed.
-- Native `sound` and `voice_preset` support is currently only verified for `kling-v2-6`.
+- Native preset and cloned voices are available for `kling-v2-6`; the active API rejects `voice_list` for `kling-v3`.
 - Newer documented models such as `kling-video-o1` and `kling-v3-omni` are intentionally hidden from the visible dropdowns until live endpoint support is confirmed.
 
 ## Important workflow notes
@@ -633,6 +685,9 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `06_comfyui_kling_wrapper_advanced_element_subject_to_image2video.json` requires 1 frontal portrait plus 1-3 additional photos of the same subject. Background or scene images do not count as advanced-element reference images.
 - If you need both subject binding and speech, generate the bound video first and then add speech with the lip-sync or audio nodes.
 - `Motion Control` accepts either a direct http(s) reference-video URL or uploaded/local video workflow inputs. For local media, use a video loader node that provides either `VIDEO` or `reference_video_frames` plus `reference_video_info`. Set `duration` to `auto` if you want it to match the uploaded motion reference length.
+- `Lip Sync` now calls `identify-face` and `advanced-lip-sync`; leave `face_id` empty to use the first detected face.
+- `Avatar` accepts one and only one of `AUDIO`, `audio_id`, `audio_file`, or `audio_url`.
+- `Image2Video.custom_voice_id` is supported by `kling-v2-6`; it requires `sound=on` and the `<<<voice_1>>>` marker in the prompt.
 
 ## Included files
 
@@ -652,8 +707,10 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `14_comfyui_kling_wrapper_effects_single_image.json`: single-image effects workflow.
 - `15_comfyui_kling_wrapper_advanced_element_subject_with_video2audio_music.json`: advanced subject binding followed by `Video2Audio` to add generated music/ambience to the result.
 - `16_comfyui_kling_wrapper_video_character_to_image2video.json`: create a `video_character` element from a public `video_url`, then bind that element into `Image2Video`.
-- `17_comfyui_kling_wrapper_lip_sync_from_uploaded_audio_video.json`: lip-sync workflow using direct `LoadAudio` and `VHS_LoadVideo` uploads.
+- `17_comfyui_kling_wrapper_lip_sync_from_uploaded_audio_video.json`: advanced lip-sync workflow using direct `LoadAudio` and `LoadVideo` uploads.
 - `18_comfyui_kling_wrapper_custom_voice_tts_preview.json`: create a custom voice and preview its returned `trial_url`.
+- `19_comfyui_kling_wrapper_avatar_from_uploaded_audio_image.json`: create an Avatar video from one image and uploaded audio.
+- `20_comfyui_kling_wrapper_custom_voice_image2video.json`: clone a voice and connect its `voice_id` to Kling v2.6 image-to-video.
 - `api_examples.py`: small Python snippets that mirror the same upgraded API wrappers.
 """
     (ROOT / "README.md").write_text(content, encoding="utf-8")
@@ -665,9 +722,12 @@ import os
 from pathlib import Path
 
 from py.api import (
+    AdvancedLipSync,
     AdvancedCustomElements,
+    Avatar,
     Client,
     CustomVoiceCreate,
+    FaceIdentify,
     Image2Video,
     ImageGenerator,
     MotionControl,
@@ -774,6 +834,53 @@ def example_create_custom_voice(client: Client, voice_url: str):
     task = CustomVoiceCreate()
     task.voice_name = "Demo Voice"
     task.voice_url = voice_url
+    return task.run(client)
+
+
+def example_avatar(client: Client, image_path: str, audio_url: str):
+    task = Avatar()
+    task.image = image_to_base64(image_path)
+    task.sound_file = audio_url
+    task.prompt = "Speak naturally with subtle head movement and a friendly expression."
+    task.mode = "std"
+    return task.run(client)
+
+
+def example_advanced_lip_sync(client: Client, video_url: str, audio_url: str, audio_duration_ms: int):
+    identify = FaceIdentify()
+    identify.video_url = video_url
+    face_result = identify.run(client)
+    if not face_result.face_data:
+        raise ValueError("No face was detected in the source video.")
+
+    task = AdvancedLipSync()
+    task.session_id = face_result.session_id
+    task.face_choose = [{
+        "face_id": face_result.face_data[0].face_id,
+        "sound_file": audio_url,
+        "sound_start_time": 0,
+        "sound_end_time": audio_duration_ms,
+        "sound_insert_time": 0,
+        "sound_volume": 1.0,
+        "original_audio_volume": 1.0,
+    }]
+    return task.run(client)
+
+
+def example_image2video_with_custom_voice(
+        client: Client,
+        image_path: str,
+        voice_id: str,
+        dialogue: str,
+):
+    task = Image2Video()
+    task.model_name = "kling-v2-6"
+    task.image = image_to_base64(image_path)
+    task.prompt = f'Portrait subject <<<voice_1>>> says: "{dialogue}"'
+    task.mode = "pro"
+    task.duration = "10"
+    task.sound = "on"
+    task.voice_list = [{"voice_id": voice_id}]
     return task.run(client)
 
 
@@ -931,6 +1038,8 @@ def generate_workflows():
     nodes[6]["inputs"][0]["link"] = 1
     nodes[6]["inputs"][1]["link"] = 2
     nodes[6]["inputs"][2]["link"] = 5
+    nodes[4]["inputs"][0]["link"] = 3
+    nodes[4]["inputs"][1]["link"] = 4
     nodes[7]["inputs"][0]["link"] = 6
     nodes[8]["inputs"][0]["link"] = 7
     nodes[8]["inputs"][1]["link"] = 8
@@ -1072,7 +1181,7 @@ def generate_workflows():
         link(1, 1, 0, 2, 0, CLIENT_TYPE),
         link(2, 1, 0, 4, 0, CLIENT_TYPE),
         link(3, 3, 0, 4, 1, LIPSYNC_INPUT_TYPE),
-        link(4, 2, 1, 4, 3, "STRING"),
+        link(4, 2, 1, 4, 2, "STRING"),
         link(5, 4, 0, 5, 0, "STRING"),
     ]
     nodes[1]["inputs"][0]["link"] = 1
@@ -1099,6 +1208,29 @@ def generate_workflows():
     examples["14_comfyui_kling_wrapper_effects_single_image.json"] = workflow(nodes, links)
 
     nodes = [
+        load_audio_node(1, "example_lipsync_audio.wav", [40, 40], 0),
+        load_video_node(2, "example_lipsync_source.mp4", [40, 300], 1),
+        lip_sync_audio_input_node(3, [420, 40], 2),
+        lip_sync_node(4, [860, 180], 3),
+        preview_video_node(5, [1340, 180], 4, 4),
+    ]
+    nodes[3]["inputs"] = nodes[3]["inputs"][:2] + [input_slot("video_input", "VIDEO")]
+    links = [
+        link(1, 1, 0, 3, 0, "AUDIO"),
+        link(2, 3, 0, 4, 1, LIPSYNC_INPUT_TYPE),
+        link(3, 2, 0, 4, 2, "VIDEO"),
+        link(4, 4, 0, 5, 0, "STRING"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["outputs"][0]["links"] = [3]
+    nodes[2]["inputs"][0]["link"] = 1
+    nodes[2]["outputs"][0]["links"] = [2]
+    nodes[3]["inputs"][1]["link"] = 2
+    nodes[3]["inputs"][2]["link"] = 3
+    nodes[3]["outputs"][0]["links"] = [4]
+    examples["17_comfyui_kling_wrapper_lip_sync_from_uploaded_audio_video.json"] = workflow(nodes, links)
+
+    nodes = [
         load_audio_node(1, "example_voice_reference.mp3", [40, 80], 0),
         custom_voice_create_node(2, [420, 80], 1),
         preview_audio_node(3, [880, 120], 2, 2),
@@ -1112,6 +1244,55 @@ def generate_workflows():
     nodes[1]["outputs"][2]["links"] = [2]
     nodes[2]["inputs"][0]["link"] = 2
     examples["18_comfyui_kling_wrapper_custom_voice_tts_preview.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_image_node(1, "example_avatar_portrait.png", [40, 80], 0),
+        load_audio_node(2, "example_avatar_speech.wav", [40, 480], 1),
+        avatar_node(3, [460, 200], 2),
+        preview_video_node(4, [980, 200], 3, 3),
+    ]
+    links = [
+        link(1, 1, 0, 3, 0, "IMAGE"),
+        link(2, 2, 0, 3, 1, "AUDIO"),
+        link(3, 3, 0, 4, 0, "STRING"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["outputs"][0]["links"] = [2]
+    nodes[2]["inputs"][0]["link"] = 1
+    nodes[2]["inputs"][1]["link"] = 2
+    nodes[2]["outputs"][0]["links"] = [3]
+    examples["19_comfyui_kling_wrapper_avatar_from_uploaded_audio_image.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_audio_node(1, "example_voice_reference.mp3", [40, 40], 0),
+        load_image_node(2, "example_talking_portrait.png", [40, 360], 1),
+        custom_voice_create_node(3, [420, 40], 2),
+        image2video_node(
+            4,
+            [860, 260],
+            3,
+            "kling-v2-6",
+            'The portrait subject <<<voice_1>>> says: "Welcome to this custom voice demonstration."',
+            mode="pro",
+            duration="10",
+            sound="on",
+        ),
+        preview_video_node(5, [1380, 260], 4, 4),
+    ]
+    links = [
+        link(1, 1, 0, 3, 0, "AUDIO"),
+        link(2, 2, 0, 4, 1, "IMAGE"),
+        link(3, 3, 0, 4, 3, "STRING"),
+        link(4, 4, 0, 5, 0, "STRING"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["outputs"][0]["links"] = [2]
+    nodes[2]["inputs"][0]["link"] = 1
+    nodes[2]["outputs"][0]["links"] = [3]
+    nodes[3]["inputs"][1]["link"] = 2
+    nodes[3]["inputs"][3]["link"] = 3
+    nodes[3]["outputs"][0]["links"] = [4]
+    examples["20_comfyui_kling_wrapper_custom_voice_image2video.json"] = workflow(nodes, links)
 
     for name, data in examples.items():
         write_json(name, strip_client_dependency(data))

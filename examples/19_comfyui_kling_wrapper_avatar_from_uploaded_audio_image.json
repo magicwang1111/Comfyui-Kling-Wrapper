@@ -1,19 +1,58 @@
 {
   "id": "Comfyui-Kling-Wrapper-example",
   "revision": 0,
-  "last_node_id": 5,
-  "last_link_id": 4,
+  "last_node_id": 4,
+  "last_link_id": 3,
   "nodes": [
     {
-      "id": 2,
+      "id": 1,
       "type": "LoadImage",
       "pos": [
         40,
-        150
+        80
       ],
       "size": [
         290,
         340
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "example_avatar_portrait.png",
+        "image"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "LoadAudio",
+      "pos": [
+        40,
+        480
+      ],
+      "size": [
+        320,
+        120
       ],
       "flags": {},
       "order": 1,
@@ -21,163 +60,134 @@
       "inputs": [],
       "outputs": [
         {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": null,
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            2
+          ],
           "slot_index": 0
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null,
-          "slot_index": 1
         }
       ],
       "properties": {
-        "Node name for S&R": "LoadImage"
+        "Node name for S&R": "LoadAudio"
       },
       "widgets_values": [
-        "example_model.png",
-        "image"
+        "example_avatar_speech.wav"
       ]
     },
     {
       "id": 3,
-      "type": "LoadImage",
+      "type": "Comfyui-Kling-Wrapper Avatar",
       "pos": [
-        40,
-        520
+        460,
+        200
       ],
       "size": [
-        290,
-        340
+        420,
+        320
       ],
       "flags": {},
       "order": 2,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1,
+          "shape": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 2
+        }
+      ],
       "outputs": [
         {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": null,
+          "name": "url",
+          "type": "STRING",
+          "links": [
+            3
+          ],
           "slot_index": 0
         },
         {
-          "name": "MASK",
-          "type": "MASK",
+          "name": "video_id",
+          "type": "STRING",
           "links": null,
           "slot_index": 1
         }
       ],
       "properties": {
-        "Node name for S&R": "LoadImage"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Avatar"
       },
       "widgets_values": [
-        "example_cloth.png",
-        "image"
+        "std",
+        "",
+        "",
+        "",
+        "Speak naturally with subtle head movement and a friendly expression."
       ]
     },
     {
       "id": 4,
-      "type": "Comfyui-Kling-Wrapper Virtual Try On",
+      "type": "Comfyui-Kling-Wrapper Preview Video",
       "pos": [
-        420,
-        310
+        980,
+        200
       ],
       "size": [
-        360,
-        180
+        430,
+        820
       ],
       "flags": {},
       "order": 3,
       "mode": 0,
       "inputs": [
         {
-          "name": "human_image",
-          "type": "IMAGE",
-          "link": 2,
-          "shape": 7
-        },
-        {
-          "name": "cloth_image",
-          "type": "IMAGE",
-          "link": 3,
-          "shape": 7
+          "name": "video_url",
+          "type": "STRING",
+          "link": 3
         }
       ],
       "outputs": [
         {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            4
-          ],
+          "name": "file_path",
+          "type": "STRING",
+          "links": null,
           "slot_index": 0
         }
       ],
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Virtual Try On"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Preview Video"
       },
-      "widgets_values": [
-        "kolors-virtual-try-on-v1-5"
-      ]
-    },
-    {
-      "id": 5,
-      "type": "SaveImage",
-      "pos": [
-        860,
-        320
-      ],
-      "size": [
-        320,
-        100
-      ],
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 4,
-          "shape": 7
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "SaveImage"
-      },
-      "widgets_values": [
-        "Comfyui-Kling-Wrapper-virtual-try-on"
-      ]
+      "widgets_values": []
     }
   ],
   "links": [
     [
-      2,
-      2,
-      0,
-      4,
-      0,
-      "IMAGE"
-    ],
-    [
-      3,
-      3,
-      0,
-      4,
       1,
+      1,
+      0,
+      3,
+      0,
       "IMAGE"
     ],
     [
-      4,
+      2,
+      2,
+      0,
+      3,
+      1,
+      "AUDIO"
+    ],
+    [
+      3,
+      3,
+      0,
       4,
       0,
-      5,
-      0,
-      "IMAGE"
+      "STRING"
     ]
   ],
   "groups": [],

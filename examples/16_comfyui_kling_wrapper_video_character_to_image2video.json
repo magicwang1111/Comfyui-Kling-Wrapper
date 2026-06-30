@@ -164,6 +164,11 @@
           "shape": 7
         },
         {
+          "name": "custom_voice_id",
+          "type": "STRING",
+          "link": null
+        },
+        {
           "name": "element_list",
           "type": "COMFYUI_KLING_WRAPPER_ELEMENT_LIST",
           "link": 3
@@ -245,7 +250,7 @@
       2,
       0,
       5,
-      1,
+      0,
       "IMAGE"
     ],
     [
@@ -261,7 +266,7 @@
       4,
       0,
       5,
-      4,
+      3,
       "COMFYUI_KLING_WRAPPER_ELEMENT_LIST"
     ],
     [

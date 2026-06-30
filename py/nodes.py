@@ -1,7 +1,7 @@
-from .api import Client, ImageGenerator, ImageExpander, Image2Video, Video2Audio, Text2Audio, \
-    Text2Video, CameraControl, CameraControlConfig, KolorsVurtualTryOn, VideoExtend, LipSync, LipSyncInput, EffectInput, \
-    Effects, MultiImages2Video, MultiModelVideoEdit, AdvancedCustomElements, MotionControl, CustomVoiceCreate, \
-    CustomVoiceQuery, TTS
+from .api import AdvancedLipSync, Avatar, Client, FaceIdentify, ImageGenerator, ImageExpander, Image2Video, \
+    Video2Audio, Text2Audio, Text2Video, CameraControl, CameraControlConfig, KolorsVurtualTryOn, VideoExtend, \
+    LipSyncInput, EffectInput, Effects, MultiImages2Video, MultiModelVideoEdit, AdvancedCustomElements, \
+    MotionControl, CustomVoiceCreate, CustomVoiceQuery, TTS
 from .api.capabilities import DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, DEFAULT_VIDEO_ASPECT_RATIOS, \
     DEFAULT_VIDEO_DURATIONS, ELEMENT_LIST_TYPE, ELEMENT_TYPE, EXTENDED_IMAGE_ASPECT_RATIOS, IMAGE_GENERATION_MODELS, \
     IMAGE_TO_VIDEO_MODELS, LIPSYNC_INPUT_TYPE, MULTI_IMAGE_TO_VIDEO_MODELS, NODE_CATEGORY, NODE_PREFIX, SHOT_TYPES, \
@@ -1310,6 +1310,23 @@ def _upload_audio_reference(audio):
             os.remove(temp_path)
 
 
+def _audio_duration_ms(audio):
+    if not isinstance(audio, dict) or "waveform" not in audio or "sample_rate" not in audio:
+        raise ValueError("audio must contain waveform and sample_rate.")
+    waveform = audio["waveform"]
+    shape = getattr(waveform, "shape", None)
+    if not shape or len(shape) < 1:
+        raise ValueError("audio waveform must contain at least one sample.")
+    try:
+        sample_count = int(shape[-1])
+        sample_rate = int(audio["sample_rate"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("audio waveform shape and sample_rate must be numeric.") from exc
+    if sample_count <= 0 or sample_rate <= 0:
+        raise ValueError("audio must contain samples and have a positive sample_rate.")
+    return int(round(sample_count * 1000 / sample_rate))
+
+
 def _upload_image_reference(image):
     if image is None:
         raise ValueError("image is required.")
@@ -1788,6 +1805,7 @@ class Image2VideoNode:
                 }),
                 "sound": (SOUND_OPTIONS,),
                 "voice_preset": (VOICE_PRESET_OPTIONS, {"default": DEFAULT_VOICE_PRESET}),
+                "custom_voice_id": ("STRING", {"forceInput": True}),
                 "shot_type": (SHOT_TYPES,),
                 "image_list": ("IMAGE",),
                 "element_list": (ELEMENT_LIST_TYPE,),
@@ -1818,6 +1836,7 @@ class Image2VideoNode:
                  camera_control_value=None,
                  sound="off",
                  voice_preset=DEFAULT_VOICE_PRESET,
+                 custom_voice_id="",
                  shot_type="single",
                  image_list=None,
                  element_list=None,
@@ -1825,7 +1844,17 @@ class Image2VideoNode:
         capability = get_video_capability(model)
         mode = _normalize_requested_mode(model, capability, mode)
         normalized_element_list = _normalize_element_list(element_list)
-        parsed_voice_list = _build_voice_list_from_preset(voice_preset)
+        preset_voice_list = _build_voice_list_from_preset(voice_preset)
+        custom_voice_id = str(custom_voice_id or "").strip()
+        if custom_voice_id and preset_voice_list:
+            raise ValueError("Use custom_voice_id or voice_preset, not both.")
+        if custom_voice_id and sound != "on":
+            raise ValueError("custom_voice_id requires sound='on'.")
+        if custom_voice_id and "<<<voice_1>>>" not in str(prompt or ""):
+            raise ValueError("custom_voice_id requires the prompt marker <<<voice_1>>>.")
+        if custom_voice_id and normalized_element_list:
+            raise ValueError("custom_voice_id cannot be used together with element_list.")
+        parsed_voice_list = [{"voice_id": custom_voice_id}] if custom_voice_id else preset_voice_list
         encoded_image_list = _image_batch_to_base64_list(image_list)
         has_reference_video = isinstance(reference_video, str) and bool(reference_video.strip())
         has_camera_control = camera_control_type not in (None, "None")
@@ -1895,12 +1924,27 @@ class Image2VideoNode:
             _raise_with_model_guidance(exc, model)
         _log_final_unit_deduction(response, "image2video")
 
-        for video_info in response.task_result.videos:
+        task_status = str(getattr(response, "task_status", "") or "").strip().lower()
+        task_id = str(getattr(response, "task_id", "") or "").strip() or "unknown"
+        task_status_msg = str(getattr(response, "task_status_msg", "") or "").strip()
+        if task_status and task_status != "succeed":
+            details = task_status_msg or "Kling returned no additional failure details."
+            raise ValueError(
+                f"Kling image2video task {task_id} ended with status "
+                f"{task_status or 'unknown'}: {details}"
+            )
+
+        task_result = getattr(response, "task_result", None)
+        videos = getattr(task_result, "videos", None) if task_result is not None else None
+        if not videos:
+            raise ValueError(
+                f"Kling image2video task {task_id} succeeded but returned no videos."
+            )
+
+        for video_info in videos:
             video_url = _preferred_media_url(video_info)
             print(f'KLing API output video id: {video_info.id}, url: {video_url}')
             return (video_url, video_info.id)
-
-        return ('', '')
 
 
 class Text2VideoNode:
@@ -2301,8 +2345,21 @@ class LipSyncAudioInputNode:
         return {
             "optional": {
                 "audio": ("AUDIO",),
+                "audio_id": ("STRING", {"multiline": False, "default": ""}),
                 "audio_file": ("STRING", {"multiline": False, "default": ""}),
                 "audio_url": ("STRING", {"multiline": False, "default": ""}),
+                "sound_start_time_ms": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 60000,
+                    "step": 100,
+                }),
+                "sound_end_time_ms": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 60000,
+                    "step": 100,
+                }),
             },
         }
 
@@ -2313,35 +2370,47 @@ class LipSyncAudioInputNode:
     RETURN_TYPES = (LIPSYNC_INPUT_TYPE,)
     RETURN_NAMES = ("input",)
 
-    def run(self, audio=None, audio_file="", audio_url=""):
+    def run(
+            self,
+            audio=None,
+            audio_id="",
+            audio_file="",
+            audio_url="",
+            sound_start_time_ms=0,
+            sound_end_time_ms=0,
+    ):
+        audio_id = str(audio_id or "").strip()
         audio_file = str(audio_file or "").strip()
         audio_url = str(audio_url or "").strip()
         sources = [
             name for name, present in (
                 ("audio", audio is not None),
+                ("audio_id", bool(audio_id)),
                 ("audio_file", bool(audio_file)),
                 ("audio_url", bool(audio_url)),
             )
             if present
         ]
         if not sources:
-            raise ValueError("Provide audio, audio_file, or audio_url for lip sync audio input.")
+            raise ValueError("Provide audio, audio_id, audio_file, or audio_url for lip sync audio input.")
         if len(sources) > 1:
-            raise ValueError("Provide only one of audio, audio_file, or audio_url for lip sync audio input.")
+            raise ValueError("Provide only one of audio, audio_id, audio_file, or audio_url for lip sync audio input.")
 
         input = LipSyncInput()
         input.mode = "audio2video"
         if audio is not None:
-            input.audio_type = "url"
+            input.audio_duration_ms = _audio_duration_ms(audio)
             input.audio_url = _upload_audio_reference(audio)
+        elif audio_id:
+            input.audio_id = audio_id
         elif audio_file:
-            input.audio_type = "url"
             input.audio_url = _upload_file_to_temporary_media_host(audio_file)
         else:
             if not _is_http_url(audio_url):
                 raise ValueError("audio_url must be an http(s) URL. Use audio or audio_file for local audio.")
-            input.audio_type = "url"
             input.audio_url = audio_url
+        input.sound_start_time = int(sound_start_time_ms)
+        input.sound_end_time = int(sound_end_time_ms)
 
         return (input,)
 
@@ -2361,6 +2430,24 @@ class LipSyncNode:
                 "video_input": ("VIDEO",),
                 "video_frames": ("IMAGE",),
                 "video_info": ("VHS_VIDEOINFO",),
+                "sound_insert_time_ms": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 60000,
+                    "step": 100,
+                }),
+                "sound_volume": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1,
+                }),
+                "original_audio_volume": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1,
+                }),
             }
         }
 
@@ -2381,6 +2468,9 @@ class LipSyncNode:
             video_input=None,
             video_frames=None,
             video_info=None,
+            sound_insert_time_ms=0,
+            sound_volume=1.0,
+            original_audio_volume=1.0,
     ):
         video_id, video_url = _resolve_lip_sync_video_reference(
             video_id=video_id,
@@ -2391,19 +2481,180 @@ class LipSyncNode:
             video_info=video_info,
         )
 
-        generator = LipSync()
-        input.video_id = video_id
-        input.video_url = video_url
-        if face_id:
-            input.face_id = face_id
-        generator.input = input
-
         with _runtime_client() as client:
+            identify = FaceIdentify()
+            if video_id:
+                identify.video_id = video_id
+            else:
+                identify.video_url = video_url
+            identify_response = identify.run(client)
+            _log_final_unit_deduction(identify_response, "identify_face")
+
+            faces = list(getattr(identify_response, "face_data", None) or [])
+            if not faces:
+                raise ValueError("Kling face identification did not return any usable faces.")
+            if not str(getattr(identify_response, "session_id", "") or "").strip():
+                raise ValueError("Kling face identification returned an empty session_id.")
+            requested_face_id = str(face_id or "").strip()
+            selected_face = faces[0]
+            if requested_face_id:
+                selected_face = next(
+                    (face for face in faces if str(getattr(face, "face_id", "")) == requested_face_id),
+                    None,
+                )
+                if selected_face is None:
+                    available = ", ".join(str(getattr(face, "face_id", "")) for face in faces)
+                    raise ValueError(
+                        f"face_id={requested_face_id!r} was not returned by identify-face. "
+                        f"Available face IDs: {available or 'none'}."
+                    )
+
+            audio_id = str(getattr(input, "audio_id", "") or "").strip()
+            sound_file = str(getattr(input, "audio_url", "") or "").strip()
+            audio_duration_ms = int(getattr(input, "audio_duration_ms", 0) or 0)
+            if getattr(input, "mode", "") == "text2video":
+                tts = TTS()
+                tts.text = input.text
+                tts.voice_id = input.voice_id
+                tts.voice_language = _normalize_tts_voice_language(input.text, input.voice_language)
+                tts.voice_speed = float(input.voice_speed)
+                tts_response = tts.run(client)
+                _log_final_unit_deduction(tts_response, "lip_sync_tts")
+                audio_payload = _extract_tts_audio_result(tts_response)
+                audio_id = str(audio_payload.get("id", "") or "").strip()
+                if not audio_id:
+                    raise ValueError("Kling TTS completed but returned an empty audio_id for lip sync.")
+                try:
+                    audio_duration_ms = int(round(float(audio_payload.get("duration")) * 1000))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("Kling TTS returned an invalid audio duration for lip sync.") from exc
+
+            sound_start_time = int(getattr(input, "sound_start_time", 0) or 0)
+            sound_end_time = int(getattr(input, "sound_end_time", 0) or 0)
+            if sound_end_time == 0 and audio_duration_ms:
+                sound_end_time = audio_duration_ms
+            if sound_end_time <= sound_start_time:
+                raise ValueError(
+                    "sound_end_time_ms must be greater than sound_start_time_ms. "
+                    "For audio_id, audio_file, or audio_url inputs, provide sound_end_time_ms explicitly."
+                )
+            clip_duration_ms = sound_end_time - sound_start_time
+            if not 2000 <= clip_duration_ms <= 60000:
+                raise ValueError("The trimmed lip-sync audio must be between 2 and 60 seconds.")
+
+            sound_insert_time = int(sound_insert_time_ms)
+            face_start_time = getattr(selected_face, "start_time", None)
+            face_end_time = getattr(selected_face, "end_time", None)
+            if face_start_time is not None and face_end_time is not None:
+                inserted_end_time = sound_insert_time + clip_duration_ms
+                overlap_ms = max(
+                    0,
+                    min(int(face_end_time), inserted_end_time) - max(int(face_start_time), sound_insert_time),
+                )
+                if overlap_ms < 2000:
+                    raise ValueError(
+                        "The inserted audio must overlap the selected face's visible interval by at least 2 seconds."
+                    )
+
+            face_choose = {
+                "face_id": str(getattr(selected_face, "face_id", "")),
+                "sound_start_time": sound_start_time,
+                "sound_end_time": sound_end_time,
+                "sound_insert_time": sound_insert_time,
+                "sound_volume": float(sound_volume),
+                "original_audio_volume": float(original_audio_volume),
+            }
+            if audio_id:
+                face_choose["audio_id"] = audio_id
+            elif sound_file:
+                face_choose["sound_file"] = sound_file
+            else:
+                raise ValueError("Lip sync requires audio_id or an uploaded audio file URL.")
+
+            generator = AdvancedLipSync()
+            generator.session_id = identify_response.session_id
+            generator.face_choose = [face_choose]
             response = generator.run(client)
+            _log_final_unit_deduction(response, "advanced_lip_sync")
 
         video_url, video_id = _extract_first_video_result(response, "lip_sync")
         print(f'KLing API output video id: {video_id}, url: {video_url}')
         return (video_url, video_id)
+
+
+class AvatarNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "mode": (["std", "pro"], {"default": "std"}),
+            },
+            "optional": {
+                "audio": ("AUDIO",),
+                "audio_id": ("STRING", {"multiline": False, "default": ""}),
+                "audio_file": ("STRING", {"multiline": False, "default": ""}),
+                "audio_url": ("STRING", {"multiline": False, "default": ""}),
+                "prompt": ("STRING", {"multiline": True, "default": ""}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("url", "video_id")
+    FUNCTION = "generate"
+    OUTPUT_NODE = True
+    CATEGORY = NODE_CATEGORY
+
+    def generate(
+            self,
+            image,
+            mode,
+            audio=None,
+            audio_id="",
+            audio_file="",
+            audio_url="",
+            prompt="",
+    ):
+        audio_id = str(audio_id or "").strip()
+        audio_file = str(audio_file or "").strip()
+        audio_url = str(audio_url or "").strip()
+        sources = [
+            name for name, present in (
+                ("audio", audio is not None),
+                ("audio_id", bool(audio_id)),
+                ("audio_file", bool(audio_file)),
+                ("audio_url", bool(audio_url)),
+            )
+            if present
+        ]
+        if not sources:
+            raise ValueError("Provide audio, audio_id, audio_file, or audio_url for Avatar.")
+        if len(sources) > 1:
+            raise ValueError("Provide only one of audio, audio_id, audio_file, or audio_url for Avatar.")
+
+        generator = Avatar()
+        generator.image = _image_to_base64(image)
+        generator.mode = mode
+        if prompt:
+            generator.prompt = str(prompt)
+        if audio is not None:
+            duration_ms = _audio_duration_ms(audio)
+            if not 2000 <= duration_ms <= 300000:
+                raise ValueError("Avatar audio must be between 2 and 300 seconds.")
+            generator.sound_file = _upload_audio_reference(audio)
+        elif audio_id:
+            generator.audio_id = audio_id
+        elif audio_file:
+            generator.sound_file = _upload_file_to_temporary_media_host(audio_file)
+        else:
+            if not _is_http_url(audio_url):
+                raise ValueError("audio_url must be an http(s) URL. Use audio or audio_file for local audio.")
+            generator.sound_file = audio_url
+
+        with _runtime_client() as client:
+            response = generator.run(client)
+        _log_final_unit_deduction(response, "avatar")
+        return _extract_first_video_result(response, "avatar")
 
 
 class EffectNode:

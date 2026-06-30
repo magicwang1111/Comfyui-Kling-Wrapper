@@ -5,7 +5,8 @@ from .text2video import Text2Video, CameraControl, CameraControlConfig
 from .image2video import Image2Video
 from .virtual_try_on import KolorsVurtualTryOn
 from .video_entend import VideoExtend
-from .lip_sync import LipSync, LipSyncInput
+from .lip_sync import AdvancedLipSync, FaceIdentify, LipSyncInput
+from .avatar import Avatar
 from .effects import Effects, EffectInput
 from .image_expander import ImageExpander
 from .video2audio import Video2Audio

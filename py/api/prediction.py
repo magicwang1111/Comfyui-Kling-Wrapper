@@ -105,6 +105,18 @@ class VideoPredictionResponse(BaseModel):
     final_unit_deduction: float = None
 
 
+class FaceIdentifyResponse(BaseModel):
+    class FaceDescription(BaseModel):
+        face_id: str = None
+        face_image: str = None
+        start_time: int = None
+        end_time: int = None
+
+    session_id: str = None
+    face_data: List[FaceDescription] = []
+    final_unit_deduction: float = None
+
+
 # TODO Video2Audio / Text2Audio
 class AudioResponse(BaseModel):
     class Result(BaseModel):

@@ -67,6 +67,11 @@
           "type": "IMAGE",
           "link": null,
           "shape": 7
+        },
+        {
+          "name": "custom_voice_id",
+          "type": "STRING",
+          "link": null
         }
       ],
       "outputs": [
@@ -145,7 +150,7 @@
       2,
       0,
       3,
-      1,
+      0,
       "IMAGE"
     ],
     [
