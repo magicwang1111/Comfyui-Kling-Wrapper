@@ -68,6 +68,50 @@ class BackendConfigTests(unittest.TestCase):
 
         self.assertIn("4k", capability["modes"])
 
+    def test_kling_v3_accepts_native_audio(self):
+        capability = kling_capabilities.validate_video_generation_request(
+            task_name="image2video",
+            model_name="kling-v3",
+            mode="pro",
+            duration="3",
+            has_sound=True,
+        )
+
+        self.assertTrue(capability["supports_sound"])
+
+    def test_kling_v3_image2video_sends_selected_sound_value(self):
+        sentinel_client = object()
+        captured_payloads = []
+
+        @contextmanager
+        def fake_runtime_client():
+            yield sentinel_client
+
+        def fake_run(generator, client):
+            self.assertIs(client, sentinel_client)
+            captured_payloads.append(generator.to_dict())
+            return SimpleNamespace(
+                task_result=SimpleNamespace(
+                    videos=[SimpleNamespace(url="https://example.com/video.mp4", id="video-123")]
+                )
+            )
+
+        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            with mock.patch.object(kling_nodes.Image2Video, "run", fake_run):
+                for sound in ("on", "off"):
+                    with self.subTest(sound=sound):
+                        url, video_id = kling_nodes.Image2VideoNode().generate(
+                            model="kling-v3",
+                            element_list=[{"element_id": "element-123"}],
+                            mode="pro",
+                            duration="3",
+                            sound=sound,
+                        )
+                        self.assertEqual(url, "https://example.com/video.mp4")
+                        self.assertEqual(video_id, "video-123")
+
+        self.assertEqual([payload["sound"] for payload in captured_payloads], ["on", "off"])
+
     def test_non_4k_models_reject_4k_video_mode(self):
         with self.assertRaisesRegex(ValueError, "kling-v2-6 only supports modes: pro"):
             kling_capabilities.validate_video_generation_request(

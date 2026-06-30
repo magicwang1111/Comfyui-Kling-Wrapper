@@ -1871,8 +1871,7 @@ class Image2VideoNode:
                 camera_control_value,
             )
 
-        if sound == "on":
-            generator.sound = sound
+        generator.sound = sound
 
         if parsed_voice_list:
             generator.voice_list = parsed_voice_list
@@ -2010,8 +2009,7 @@ class Text2VideoNode:
                 camera_control_value,
             )
 
-        if sound == "on":
-            generator.sound = sound
+        generator.sound = sound
 
         if parsed_voice_list:
             generator.voice_list = parsed_voice_list

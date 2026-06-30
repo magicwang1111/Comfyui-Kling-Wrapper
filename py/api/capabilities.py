@@ -231,7 +231,7 @@ VIDEO_MODEL_CAPABILITIES = {
         "supports_image_list": True,
         "supports_element_list": True,
         "supports_reference_video": False,
-        "supports_sound": False,
+        "supports_sound": True,
         "supports_voice_list": False,
         "supports_negative_prompt": False,
         "supports_cfg_scale": False,
