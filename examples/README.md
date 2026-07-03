@@ -6,6 +6,7 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 
 - Create and fill in `config.local.json` in the repository root before importing the workflows.
 - You can copy `config.example.json` in the repository root as a starting template.
+- For Tencent VOD workflows, set `tencent_secret_id`, `tencent_secret_key`, and `tencent_sub_app_id`, or use the `TENCENTCLOUD_SECRET_ID` and `TENCENTCLOUD_SECRET_KEY` environment variables.
 - Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, `example_scene.png`, `example_lipsync_source.mp4`, `example_lipsync_audio.wav`, and `example_voice_reference.mp3` with files that exist in your ComfyUI input directory.
 - Replace placeholder URLs such as `https://example.com/reference-motion.mp4` with real URLs when needed.
 - Native preset and cloned voices are available for `kling-v2-6`; the active API rejects `voice_list` for `kling-v3`.
@@ -43,4 +44,11 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `18_comfyui_kling_wrapper_custom_voice_tts_preview.json`: create a custom voice and preview its returned `trial_url`.
 - `19_comfyui_kling_wrapper_avatar_from_uploaded_audio_image.json`: create an Avatar video from one image and uploaded audio.
 - `20_comfyui_kling_wrapper_custom_voice_image2video.json`: clone a voice and connect its `voice_id` to Kling v2.6 image-to-video.
+- `21_tencent_vod_text2video.json`: minimal Tencent VOD text-to-video workflow.
+- `22_tencent_vod_image2video.json`: minimal Tencent VOD image-to-video workflow.
+- `23_tencent_vod_multi_images_to_video.json`: Tencent VOD multi-image reference generation.
+- `24_tencent_vod_motion_control.json`: Tencent VOD motion-control workflow.
+- `25_tencent_vod_multimodal_video_edit.json`: Tencent VOD 3.0-Omni video editing with an image reference.
+- `26_tencent_vod_advanced_element_create.json`: Tencent VOD advanced subject creation.
+- `27_tencent_vod_custom_voice_create.json`: Tencent VOD custom voice creation and trial preview.
 - `api_examples.py`: small Python snippets that mirror the same upgraded API wrappers.

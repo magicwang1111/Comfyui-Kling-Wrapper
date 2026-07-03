@@ -1,7 +1,7 @@
 from .api.capabilities import NODE_PREFIX
-from .nodes import AdvancedCustomElementCreateNode, AdvancedCustomElementQueryNode, AvatarNode, EffectNode, ElementListBuilderNode, \
+from .nodes import AdvancedCustomElementCreateNode, AdvancedCustomElementDeleteNode, AdvancedCustomElementQueryNode, AvatarNode, EffectNode, ElementListBuilderNode, \
     Image2VideoNode, ImageExpanderNode, ImageGeneratorNode, KolorsVirtualTryOnNode, LipSyncAudioInputNode, \
-    LipSyncNode, LipSyncTextInputNode, MotionControlNode, MultiImagesToVideoNode, PreviewAudio, PreviewVideo, Text2VideoNode, \
+    LipSyncNode, LipSyncTextInputNode, MotionControlNode, MultiImagesToVideoNode, MultiModalVideoEditNode, PreviewAudio, PreviewVideo, Text2VideoNode, \
     TextToAudioNode, Video2AudioNode, VideoExtendNode, CustomVoiceCreateNode, CustomVoiceQueryNode, TTSNode
 
 
@@ -21,6 +21,7 @@ NODE_CLASS_MAPPINGS = {
     _node_name("Text2Video"): Text2VideoNode,
     _node_name("Image2Video"): Image2VideoNode,
     _node_name("Multi Images To Video"): MultiImagesToVideoNode,
+    _node_name("Multi Modal Video Edit"): MultiModalVideoEditNode,
     _node_name("Virtual Try On"): KolorsVirtualTryOnNode,
     _node_name("Preview Video"): PreviewVideo,
     _node_name("Preview Audio"): PreviewAudio,
@@ -31,6 +32,7 @@ NODE_CLASS_MAPPINGS = {
     _node_name("Effects"): EffectNode,
     _node_name("Advanced Element Create"): AdvancedCustomElementCreateNode,
     _node_name("Advanced Element Query"): AdvancedCustomElementQueryNode,
+    _node_name("Advanced Element Delete"): AdvancedCustomElementDeleteNode,
     _node_name("Element List Builder"): ElementListBuilderNode,
     _node_name("Motion Control"): MotionControlNode,
 }

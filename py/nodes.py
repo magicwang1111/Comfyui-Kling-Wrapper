@@ -8,6 +8,22 @@ from .api.capabilities import DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, DEFAULT_
     SOUND_OPTIONS, TEXT_TO_VIDEO_MODELS, VIDEO_GENERATION_MODES, get_image_capability, get_video_capability, \
     validate_image_generation_request, validate_video_generation_request
 from .api.exceptions import KLingAPIError
+from .api.providers import (
+    OFFICIAL_PROVIDER,
+    TENCENT_VOD_PROVIDER,
+    VIDEO_PROVIDER_OPTIONS,
+    AdvancedElementCreateRequest,
+    CustomVoiceCreateRequest,
+    Image2VideoRequest,
+    MotionControlRequest,
+    MultiImagesToVideoRequest,
+    MultiModalVideoEditRequest,
+    OfficialVideoConfig,
+    OfficialVideoProvider,
+    TencentVodVideoConfig,
+    TencentVodVideoProvider,
+    Text2VideoRequest,
+)
 import base64
 import configparser
 from contextlib import contextmanager
@@ -331,6 +347,103 @@ def _create_runtime_client():
     return client
 
 
+def _resolve_video_provider_default(config_data=None):
+    config_data = config_data or _load_json_config()
+    provider = str(config_data.get("provider_default") or OFFICIAL_PROVIDER).strip().lower()
+    if provider not in VIDEO_PROVIDER_OPTIONS:
+        raise ValueError(f"provider_default must be one of: {', '.join(VIDEO_PROVIDER_OPTIONS)}")
+    return provider
+
+
+def _resolve_tencent_secret_id(config_data):
+    return _config_or_env_value(
+        config_data,
+        "tencent_secret_id",
+        ("TENCENTCLOUD_SECRET_ID", "TENCENT_SECRET_ID"),
+    )
+
+
+def _resolve_tencent_secret_key(config_data):
+    return _config_or_env_value(
+        config_data,
+        "tencent_secret_key",
+        ("TENCENTCLOUD_SECRET_KEY", "TENCENT_SECRET_KEY"),
+    )
+
+
+def _resolve_tencent_region(config_data):
+    return _config_or_env_value(config_data, "tencent_region", "TENCENT_REGION", "ap-guangzhou")
+
+
+def _resolve_tencent_sub_app_id(config_data):
+    raw_value = _config_or_env_value(config_data, "tencent_sub_app_id", "TENCENT_SUB_APP_ID")
+    if not raw_value:
+        return 0
+    try:
+        return int(str(raw_value).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError("tencent_sub_app_id must be an integer.") from exc
+
+
+def _resolve_tencent_poll_interval(config_data):
+    raw_value = _config_or_env_value(config_data, "tencent_poll_interval", "TENCENT_POLL_INTERVAL", DEFAULT_POLL_INTERVAL)
+    return _parse_poll_interval(raw_value)
+
+
+def _resolve_tencent_request_timeout(config_data):
+    raw_value = _config_or_env_value(config_data, "tencent_request_timeout", "TENCENT_REQUEST_TIMEOUT", DEFAULT_REQUEST_TIMEOUT)
+    return _parse_request_timeout(raw_value)
+
+
+def _resolve_tencent_max_wait_seconds(config_data):
+    raw_value = _config_or_env_value(
+        config_data,
+        "tencent_max_wait_seconds",
+        "TENCENT_MAX_WAIT_SECONDS",
+        3600,
+    )
+    try:
+        value = int(str(raw_value).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError("tencent_max_wait_seconds must be an integer.") from exc
+    if value < 30:
+        raise ValueError("tencent_max_wait_seconds must be greater than or equal to 30.")
+    return value
+
+
+def _create_video_provider(provider_name):
+    config_data = _load_json_config()
+    provider_name = str(provider_name or _resolve_video_provider_default(config_data)).strip().lower()
+    if provider_name == OFFICIAL_PROVIDER:
+        config = OfficialVideoConfig(
+            access_key=_resolve_access_key(config_data),
+            secret_key=_resolve_secret_key(config_data),
+            in_china=_resolve_area(config_data) == "china",
+            timeout=_resolve_request_timeout(config_data),
+            poll_interval=_resolve_poll_interval(config_data),
+        )
+        return OfficialVideoProvider(config)
+    if provider_name == TENCENT_VOD_PROVIDER:
+        secret_id = _resolve_tencent_secret_id(config_data)
+        secret_key = _resolve_tencent_secret_key(config_data)
+        sub_app_id = _resolve_tencent_sub_app_id(config_data)
+        if not secret_id or not secret_key or not sub_app_id:
+            raise ValueError(
+                "Tencent VOD provider requires tencent_secret_id, tencent_secret_key, and tencent_sub_app_id in config.local.json or environment variables."
+            )
+        config = TencentVodVideoConfig(
+            secret_id=secret_id,
+            secret_key=secret_key,
+            sub_app_id=sub_app_id,
+            region=_resolve_tencent_region(config_data),
+            request_timeout=_resolve_tencent_request_timeout(config_data),
+            poll_interval=_resolve_tencent_poll_interval(config_data),
+            max_wait_seconds=_resolve_tencent_max_wait_seconds(config_data),
+        )
+        return TencentVodVideoProvider(config)
+    raise ValueError(f"Unsupported provider: {provider_name}")
+
+
 @contextmanager
 def _runtime_client():
     client = _create_runtime_client()
@@ -338,6 +451,17 @@ def _runtime_client():
         yield client
     finally:
         client.close()
+
+
+@contextmanager
+def _video_provider(provider_name):
+    provider = _create_video_provider(provider_name)
+    try:
+        yield provider
+    finally:
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close()
 
 
 def _fetch_image(url, stream=True):
@@ -606,6 +730,28 @@ def _collect_element_types(element_list):
         if isinstance(element, dict):
             element_types.append(element.get("type") or element.get("element_type"))
     return [element_type for element_type in element_types if element_type]
+
+
+def _build_tencent_vod_image2video_request(request, image, image_tail, image_list):
+    if request.image_base64 is None or image is None:
+        raise ValueError("Tencent VOD image2video currently requires a primary IMAGE input.")
+
+    primary_urls = _upload_image_batch_references(image)
+    reference_urls = _upload_image_batch_references(image_list) if image_list is not None else []
+    merged_image_urls = [*(primary_urls[:1] if primary_urls else []), *reference_urls]
+    request.image_urls = [url for url in merged_image_urls if url]
+    request.image_base64 = None
+
+    if request.image_tail_base64 is not None and image_tail is not None:
+        tail_urls = _upload_image_batch_references(image_tail)
+        request.image_tail_url = tail_urls[0] if tail_urls else None
+        request.image_tail_base64 = None
+
+    return request
+
+
+def _build_tencent_vod_text2video_request(request):
+    return request
 
 
 def _normalize_element_reference(element):
@@ -914,7 +1060,8 @@ def _config_or_env_value(config_data, json_key, env_key, default=""):
     if _json_value_present(config_data, json_key):
         return str(config_data[json_key]).strip()
 
-    env_value = _load_env_value(env_key)
+    env_keys = env_key if isinstance(env_key, (tuple, list)) else (env_key,)
+    env_value = _load_env_value(*env_keys)
     if env_value:
         return env_value
 
@@ -1777,6 +1924,7 @@ class Image2VideoNode:
                 "model": (IMAGE_TO_VIDEO_MODELS,),
             },
             "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "image": ("IMAGE",),
                 "image_tail": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
@@ -1824,6 +1972,7 @@ class Image2VideoNode:
 
     def generate(self,
                  model,
+                 provider=OFFICIAL_PROVIDER,
                  image=None,
                  image_tail=None,
                  prompt=None,
@@ -1859,6 +2008,8 @@ class Image2VideoNode:
         has_reference_video = isinstance(reference_video, str) and bool(reference_video.strip())
         has_camera_control = camera_control_type not in (None, "None")
 
+        if provider == TENCENT_VOD_PROVIDER and image is None:
+            raise ValueError("Tencent VOD image2video requires a primary IMAGE input.")
         if image is None and not has_reference_video and not encoded_image_list and not normalized_element_list:
             raise ValueError("Provide image, image_list, element_list, or reference_video for Image2Video.")
 
@@ -1881,70 +2032,43 @@ class Image2VideoNode:
             element_types=_collect_element_types(normalized_element_list),
         )
 
-        generator = Image2Video()
-        generator.model_name = model
-        _apply_prompt_controls(generator, capability, prompt=prompt, negative_prompt=negative_prompt, cfg_scale=cfg_scale)
-        _set_if_present(generator, "mode", mode)
-        _set_if_present(generator, "duration", duration)
-
-        if image is not None:
-            generator.image = _image_to_base64(image)
-
-        if image_tail is not None:
-            generator.image_tail = _image_to_base64(image_tail)
-
-        if has_camera_control:
-            generator.camera_control = _build_camera_control(
+        request = Image2VideoRequest(
+            model_name=model,
+            prompt=_clean_optional_text(prompt),
+            negative_prompt=_clean_optional_text(negative_prompt),
+            cfg_scale=cfg_scale if capability.get("supports_cfg_scale", True) else None,
+            mode=mode,
+            duration=duration,
+            sound=sound,
+            voice_list=parsed_voice_list,
+            shot_type=shot_type,
+            image_base64=_image_to_base64(image) if image is not None else None,
+            image_tail_base64=_image_to_base64(image_tail) if image_tail is not None else None,
+            image_list=encoded_image_list or None,
+            element_list=normalized_element_list,
+            reference_video=reference_video.strip() if has_reference_video else None,
+            camera_control=_build_camera_control(
                 camera_control_type,
                 camera_control_config,
                 camera_control_value,
+            ) if has_camera_control else None,
+        )
+        if provider == TENCENT_VOD_PROVIDER:
+            request = _build_tencent_vod_image2video_request(
+                request,
+                image,
+                image_tail,
+                image_list,
             )
-
-        generator.sound = sound
-
-        if parsed_voice_list:
-            generator.voice_list = parsed_voice_list
-
-        if shot_type != "single":
-            generator.shot_type = shot_type
-
-        if encoded_image_list:
-            generator.image_list = encoded_image_list
-
-        if normalized_element_list:
-            generator.element_list = normalized_element_list
-
-        if has_reference_video:
-            generator.reference_video = reference_video.strip()
-
         try:
-            with _runtime_client() as client:
-                response = generator.run(client)
+            with _video_provider(provider) as backend:
+                result = backend.generate_image2video(request)
         except KLingAPIError as exc:
             _raise_with_model_guidance(exc, model)
-        _log_final_unit_deduction(response, "image2video")
-
-        task_status = str(getattr(response, "task_status", "") or "").strip().lower()
-        task_id = str(getattr(response, "task_id", "") or "").strip() or "unknown"
-        task_status_msg = str(getattr(response, "task_status_msg", "") or "").strip()
-        if task_status and task_status != "succeed":
-            details = task_status_msg or "Kling returned no additional failure details."
-            raise ValueError(
-                f"Kling image2video task {task_id} ended with status "
-                f"{task_status or 'unknown'}: {details}"
-            )
-
-        task_result = getattr(response, "task_result", None)
-        videos = getattr(task_result, "videos", None) if task_result is not None else None
-        if not videos:
-            raise ValueError(
-                f"Kling image2video task {task_id} succeeded but returned no videos."
-            )
-
-        for video_info in videos:
-            video_url = _preferred_media_url(video_info)
-            print(f'KLing API output video id: {video_info.id}, url: {video_url}')
-            return (video_url, video_info.id)
+        if result.final_unit_deduction is not None:
+            print(f"[{NODE_PREFIX}] final_unit_deduction | image2video: {result.final_unit_deduction}")
+        print(f'KLing API output video id: {result.video_id}, url: {result.url}')
+        return (result.url, result.video_id)
 
 
 class Text2VideoNode:
@@ -1956,6 +2080,7 @@ class Text2VideoNode:
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
             },
             "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
                 "cfg_scale": ("FLOAT", {
                     "default": 0.5,
@@ -2001,6 +2126,7 @@ class Text2VideoNode:
     def generate(self,
                  model,
                  prompt,
+                 provider=OFFICIAL_PROVIDER,
                  negative_prompt=None,
                  cfg_scale=None,
                  mode=None,
@@ -2039,50 +2165,38 @@ class Text2VideoNode:
             element_types=_collect_element_types(normalized_element_list),
         )
 
-        generator = Text2Video()
-        generator.model_name = model
-        _apply_prompt_controls(generator, capability, prompt=prompt, negative_prompt=negative_prompt, cfg_scale=cfg_scale)
-        _set_if_present(generator, "mode", mode)
-        _set_if_present(generator, "aspect_ratio", aspect_ratio)
-        _set_if_present(generator, "duration", duration)
-
-        if has_camera_control:
-            generator.camera_control = _build_camera_control(
+        request = Text2VideoRequest(
+            model_name=model,
+            prompt=_clean_optional_text(prompt) or "",
+            negative_prompt=_clean_optional_text(negative_prompt),
+            cfg_scale=cfg_scale if capability.get("supports_cfg_scale", True) else None,
+            mode=mode,
+            aspect_ratio=aspect_ratio,
+            duration=duration,
+            sound=sound,
+            voice_list=parsed_voice_list,
+            shot_type=shot_type,
+            image_list=encoded_image_list or None,
+            element_list=normalized_element_list,
+            reference_video=reference_video.strip() if has_reference_video else None,
+            camera_control=_build_camera_control(
                 camera_control_type,
                 camera_control_config,
                 camera_control_value,
-            )
-
-        generator.sound = sound
-
-        if parsed_voice_list:
-            generator.voice_list = parsed_voice_list
-
-        if shot_type != "single":
-            generator.shot_type = shot_type
-
-        if encoded_image_list:
-            generator.image_list = encoded_image_list
-
-        if normalized_element_list:
-            generator.element_list = normalized_element_list
-
-        if has_reference_video:
-            generator.reference_video = reference_video.strip()
+            ) if has_camera_control else None,
+        )
+        if provider == TENCENT_VOD_PROVIDER:
+            request = _build_tencent_vod_text2video_request(request)
 
         try:
-            with _runtime_client() as client:
-                response = generator.run(client)
+            with _video_provider(provider) as backend:
+                result = backend.generate_text2video(request)
         except KLingAPIError as exc:
             _raise_with_model_guidance(exc, model)
-        _log_final_unit_deduction(response, "text2video")
-
-        for video_info in response.task_result.videos:
-            video_url = _preferred_media_url(video_info)
-            print(f'KLing API output video id: {video_info.id}, url: {video_url}')
-            return (video_url, video_info.id)
-
-        return ('', '')
+        if result.final_unit_deduction is not None:
+            print(f"[{NODE_PREFIX}] final_unit_deduction | text2video: {result.final_unit_deduction}")
+        print(f'KLing API output video id: {result.video_id}, url: {result.url}')
+        return (result.url, result.video_id)
 
 
 class KolorsVirtualTryOnNode:
@@ -2803,6 +2917,7 @@ class MultiImagesToVideoNode:
                 "image_list": ("IMAGE",),
             },
             "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "image_tail": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
@@ -2822,6 +2937,7 @@ class MultiImagesToVideoNode:
             self,
             model,
             image_list,
+            provider=OFFICIAL_PROVIDER,
             image_tail=None,
             prompt="",
             negative_prompt="",
@@ -2852,6 +2968,24 @@ class MultiImagesToVideoNode:
             has_camera_control=False,
         )
 
+        if provider == TENCENT_VOD_PROVIDER:
+            image_urls = _upload_image_batch_references(image_list)
+            tail_urls = _upload_image_batch_references(image_tail) if image_tail is not None else []
+            request = MultiImagesToVideoRequest(
+                model_name=model,
+                prompt=_clean_optional_text(prompt) or "",
+                negative_prompt=_clean_optional_text(negative_prompt),
+                mode=mode,
+                duration=duration,
+                aspect_ratio=aspect_ratio,
+                image_urls=image_urls,
+                image_tail_url=tail_urls[0] if tail_urls else None,
+            )
+            with _video_provider(provider) as backend:
+                result = backend.generate_multi_images(request)
+            print(f'Tencent VOD output video id: {result.video_id}, url: {result.url}')
+            return (result.url, result.video_id)
+
         generator = MultiImages2Video()
         generator.model_name = model
         generator.image = encoded_image_list[0]
@@ -2869,13 +3003,109 @@ class MultiImagesToVideoNode:
         except KLingAPIError as exc:
             _raise_with_model_guidance(exc, model)
         _log_final_unit_deduction(response, "multi_image2video")
+        return _extract_first_video_result(response, "multi_image2video")
 
-        for video_info in response.task_result.videos:
-            video_url = _preferred_media_url(video_info)
-            print(f'KLing API output video id: {video_info.id}, url: {video_url}')
-            return (video_url, video_info.id)
 
-        return ("", "")
+class MultiModalVideoEditNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": (["kling-v3-omni"], {"default": "kling-v3-omni"}),
+                "prompt": ("STRING", {"multiline": True, "default": ""}),
+            },
+            "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
+                "reference_video": ("STRING", {"multiline": False, "default": ""}),
+                "reference_video_input": ("VIDEO",),
+                "reference_video_frames": ("IMAGE",),
+                "reference_video_info": ("VHS_VIDEOINFO",),
+                "image_list": ("IMAGE",),
+                "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
+                "edit_mode": (["base", "feature"], {"default": "base"}),
+                "keep_original_sound": ("BOOLEAN", {"default": False}),
+                "mode": (DEFAULT_MODES,),
+                "duration": (DEFAULT_VIDEO_DURATIONS, {"default": "3"}),
+                "aspect_ratio": (DEFAULT_VIDEO_ASPECT_RATIOS,),
+                "extra_payload_json": ("STRING", {"multiline": True, "default": ""}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("url", "video_id")
+    FUNCTION = "generate"
+    OUTPUT_NODE = False
+    CATEGORY = NODE_CATEGORY
+
+    def generate(
+            self,
+            model,
+            prompt,
+            provider=OFFICIAL_PROVIDER,
+            reference_video="",
+            reference_video_input=None,
+            reference_video_frames=None,
+            reference_video_info=None,
+            image_list=None,
+            negative_prompt="",
+            edit_mode="base",
+            keep_original_sound=False,
+            mode="std",
+            duration="3",
+            aspect_ratio="16:9",
+            extra_payload_json="",
+    ):
+        reference_video = _resolve_motion_control_reference_video(
+            reference_video,
+            reference_video_input=reference_video_input,
+            reference_video_frames=reference_video_frames,
+            reference_video_info=reference_video_info,
+        )
+        if not reference_video:
+            raise ValueError("A reference video URL or VIDEO input is required for multimodal editing.")
+        extra_payload = _parse_json_input(extra_payload_json, "extra_payload_json")
+        if extra_payload and not isinstance(extra_payload, dict):
+            raise ValueError("extra_payload_json must decode to a JSON object.")
+
+        if provider == TENCENT_VOD_PROVIDER:
+            request = MultiModalVideoEditRequest(
+                model_name=model,
+                video_url=reference_video,
+                prompt=_clean_optional_text(prompt) or "",
+                negative_prompt=_clean_optional_text(negative_prompt),
+                edit_mode=edit_mode,
+                keep_original_sound=bool(keep_original_sound),
+                mode=mode,
+                duration=duration,
+                aspect_ratio=aspect_ratio,
+                image_urls=_upload_image_batch_references(image_list) if image_list is not None else [],
+                extra_payload=extra_payload or None,
+            )
+            with _video_provider(provider) as backend:
+                result = backend.generate_multimodal_edit(request)
+            print(f'Tencent VOD output video id: {result.video_id}, url: {result.url}')
+            return (result.url, result.video_id)
+
+        generator = MultiModelVideoEdit()
+        generator.model_name = model
+        generator.prompt = _clean_optional_text(prompt) or ""
+        generator.negative_prompt = _clean_optional_text(negative_prompt) or ""
+        generator.edit_mode = edit_mode
+        generator.mode = mode
+        generator.duration = duration
+        generator.video_list = [{
+            "video_url": reference_video,
+            "keep_original_sound": "yes" if keep_original_sound else "no",
+        }]
+        encoded_images = _image_batch_to_base64_list(image_list)
+        if encoded_images:
+            generator.image_list = encoded_images
+        for key, value in (extra_payload or {}).items():
+            setattr(generator, key, value)
+        with _runtime_client() as client:
+            response = generator.run(client)
+        _log_final_unit_deduction(response, "multimodal_video_edit")
+        return _extract_first_video_result(response, "multimodal_video_edit")
 
 
 class AdvancedCustomElementCreateNode:
@@ -2888,6 +3118,7 @@ class AdvancedCustomElementCreateNode:
                 "element_description": ("STRING", {"multiline": True, "default": ""}),
             },
             "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "image": ("IMAGE",),
                 "image_list": ("IMAGE",),
                 "video_url": ("STRING", {"multiline": False, "default": ""}),
@@ -2907,6 +3138,7 @@ class AdvancedCustomElementCreateNode:
             element_type,
             element_name="",
             element_description="",
+            provider=OFFICIAL_PROVIDER,
             image=None,
             image_list=None,
             video_url="",
@@ -2999,6 +3231,24 @@ class AdvancedCustomElementCreateNode:
         generator.element_name = element_name
         generator.element_description = element_description
 
+        if provider == TENCENT_VOD_PROVIDER:
+            request = AdvancedElementCreateRequest(
+                element_name=element_name,
+                element_description=element_description,
+                reference_type=generator.reference_type,
+                element_image_list=getattr(generator, "element_image_list", None),
+                element_video_list=getattr(generator, "element_video_list", None),
+                element_voice_id=str(getattr(generator, "element_voice_id", "") or "").strip() or None,
+                extra_payload=extra_payload or None,
+            )
+            with _video_provider(provider) as backend:
+                result = backend.create_element(request)
+            return (
+                result.element,
+                result.element_id,
+                json.dumps(result.element, ensure_ascii=False),
+            )
+
         with _runtime_client() as client:
             response = generator.run(client)
         _log_final_unit_deduction(response, "advanced_custom_element_create")
@@ -3028,7 +3278,10 @@ class AdvancedCustomElementQueryNode:
             "required": {
                 "query_mode": (["task_id", "element_id"],),
                 "identifier": ("STRING", {"multiline": False, "default": ""}),
-            }
+            },
+            "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
+            },
         }
 
     RETURN_TYPES = (ELEMENT_TYPE, "STRING", "STRING")
@@ -3037,10 +3290,19 @@ class AdvancedCustomElementQueryNode:
     OUTPUT_NODE = False
     CATEGORY = NODE_CATEGORY
 
-    def query(self, query_mode, identifier):
+    def query(self, query_mode, identifier, provider=OFFICIAL_PROVIDER):
         identifier = identifier.strip()
         if not identifier:
             raise ValueError("identifier is required.")
+
+        if provider == TENCENT_VOD_PROVIDER:
+            with _video_provider(provider) as backend:
+                result = backend.query_element(query_mode, identifier)
+            return (
+                result.element,
+                result.element_id,
+                json.dumps(result.element, ensure_ascii=False),
+            )
 
         candidate_paths = []
         if query_mode == "task_id":
@@ -3084,6 +3346,52 @@ class AdvancedCustomElementQueryNode:
             element_id,
             json.dumps(element_payload, ensure_ascii=False),
         )
+
+
+class AdvancedCustomElementDeleteNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "element_id": ("STRING", {"multiline": False, "default": ""}),
+            },
+            "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("element_id", "request_id")
+    FUNCTION = "delete"
+    OUTPUT_NODE = True
+    CATEGORY = NODE_CATEGORY
+
+    def delete(self, element_id, provider=OFFICIAL_PROVIDER):
+        element_id = str(element_id or "").strip()
+        if not element_id:
+            raise ValueError("element_id is required.")
+        if provider == TENCENT_VOD_PROVIDER:
+            with _video_provider(provider) as backend:
+                request_id = backend.delete_element(element_id)
+            return (element_id, request_id)
+
+        candidate_paths = [
+            f"/v1/general/advanced-custom-elements/elements/{element_id}",
+            f"/v1/general/advanced-custom-elements/{element_id}",
+        ]
+        last_error = None
+        response = None
+        with _runtime_client() as client:
+            for path in candidate_paths:
+                try:
+                    response = client.request("DELETE", path)
+                    break
+                except Exception as exc:
+                    last_error = exc
+        if response is None:
+            raise last_error
+        request_id = str(response.get("request_id") or response.get("RequestId") or "")
+        return (element_id, request_id)
 
 
 class ElementListBuilderNode:
@@ -3137,6 +3445,7 @@ class MotionControlNode:
                 "reference_image": ("IMAGE",),
             },
             "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "reference_video": ("STRING", {"multiline": False, "default": ""}),
                 "reference_video_input": ("VIDEO",),
                 "reference_video_frames": ("IMAGE",),
@@ -3162,6 +3471,7 @@ class MotionControlNode:
             self,
             model_name,
             reference_image,
+            provider=OFFICIAL_PROVIDER,
             reference_video="",
             prompt="",
             negative_prompt="",
@@ -3198,13 +3508,33 @@ class MotionControlNode:
         if extra_payload and not isinstance(extra_payload, dict):
             raise ValueError("extra_payload_json must decode to a JSON object.")
 
+        image_url = _upload_image_reference(reference_image)
+        if provider == TENCENT_VOD_PROVIDER:
+            request = MotionControlRequest(
+                model_name=model_name,
+                image_url=image_url,
+                video_url=reference_video,
+                prompt=_clean_optional_text(prompt) or "",
+                negative_prompt=_clean_optional_text(negative_prompt),
+                mode=mode,
+                duration=duration,
+                character_orientation=character_orientation,
+                keep_original_sound=bool(keep_original_sound),
+                element_list=normalized_element_list,
+                extra_payload=extra_payload or None,
+            )
+            with _video_provider(provider) as backend:
+                result = backend.generate_motion_control(request)
+            print(f'Tencent VOD output video id: {result.video_id}, url: {result.url}')
+            return (result.url, result.video_id)
+
         generator = MotionControl()
         generator.model_name = model_name
         generator.prompt = prompt
         generator.negative_prompt = negative_prompt
         generator.mode = mode
         generator.duration = duration
-        generator.image_url = _upload_image_reference(reference_image)
+        generator.image_url = image_url
         generator.video_url = reference_video
         generator.character_orientation = character_orientation
         generator.keep_original_sound = "yes" if keep_original_sound else "no"
@@ -3277,6 +3607,7 @@ class CustomVoiceCreateNode:
                 "voice_name": ("STRING", {"multiline": False, "default": "Custom Voice"}),
             },
             "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "audio": ("AUDIO",),
                 "voice_file": ("STRING", {"multiline": False, "default": ""}),
                 "voice_url": ("STRING", {"multiline": False, "default": ""}),
@@ -3295,6 +3626,7 @@ class CustomVoiceCreateNode:
     def create(
             self,
             voice_name,
+            provider=OFFICIAL_PROVIDER,
             audio=None,
             voice_file="",
             voice_url="",
@@ -3346,6 +3678,34 @@ class CustomVoiceCreateNode:
         if callback_url:
             generator.callback_url = callback_url
 
+        if provider == TENCENT_VOD_PROVIDER:
+            if external_task_id or callback_url:
+                raise ValueError(
+                    "Tencent VOD custom voice does not support external_task_id or callback_url."
+                )
+            request = CustomVoiceCreateRequest(
+                voice_name=voice_name,
+                voice_url=str(getattr(generator, "voice_url", "") or "").strip() or None,
+                video_id=str(getattr(generator, "video_id", "") or "").strip() or None,
+            )
+            with _video_provider(provider) as backend:
+                result = backend.create_custom_voice(request)
+            voice_payload = result.voice
+            return (
+                voice_payload.get("voice_id", ""),
+                voice_payload.get("voice_name", ""),
+                voice_payload.get("trial_url", ""),
+                result.task_id,
+                json.dumps(
+                    {
+                        "task_id": result.task_id,
+                        "request_id": result.request_id,
+                        "voice": voice_payload,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
         with _runtime_client() as client:
             response = generator.run(client)
         _log_final_unit_deduction(response, "custom_voice_create")
@@ -3376,6 +3736,9 @@ class CustomVoiceQueryNode:
             "required": {
                 "task_id_or_external_task_id": ("STRING", {"multiline": False, "default": ""}),
             },
+            "optional": {
+                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
+            },
         }
 
     RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
@@ -3384,10 +3747,28 @@ class CustomVoiceQueryNode:
     OUTPUT_NODE = True
     CATEGORY = NODE_CATEGORY
 
-    def query(self, task_id_or_external_task_id):
+    def query(self, task_id_or_external_task_id, provider=OFFICIAL_PROVIDER):
         identifier = str(task_id_or_external_task_id or "").strip()
         if not identifier:
             raise ValueError("task_id_or_external_task_id is required.")
+        if provider == TENCENT_VOD_PROVIDER:
+            with _video_provider(provider) as backend:
+                result = backend.query_custom_voice(identifier)
+            voice_payload = result.voice
+            return (
+                voice_payload.get("voice_id", ""),
+                voice_payload.get("voice_name", ""),
+                voice_payload.get("trial_url", ""),
+                result.task_id,
+                json.dumps(
+                    {
+                        "task_id": result.task_id,
+                        "request_id": result.request_id,
+                        "voice": voice_payload,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
         generator = CustomVoiceQuery(identifier)
         with _runtime_client() as client:
             response = generator.run(client)

@@ -25,6 +25,17 @@ kling_package = importlib.import_module("py")
 kling_nodes = importlib.import_module("py.nodes")
 kling_capabilities = importlib.import_module("py.api.capabilities")
 kling_client = importlib.import_module("py.api.client")
+kling_providers = importlib.import_module("py.api.providers")
+kling_official_provider = importlib.import_module("py.api.providers.official")
+kling_tencent_provider = importlib.import_module("py.api.providers.tencent_vod")
+
+
+OFFICIAL_PROVIDER = kling_providers.OFFICIAL_PROVIDER
+TENCENT_VOD_PROVIDER = kling_providers.TENCENT_VOD_PROVIDER
+OfficialVideoConfig = kling_providers.OfficialVideoConfig
+TencentVodVideoConfig = kling_providers.TencentVodVideoConfig
+OfficialVideoProvider = kling_official_provider.OfficialVideoProvider
+TencentVodVideoProvider = kling_tencent_provider.TencentVodVideoProvider
 
 
 ENV_KEYS = {
@@ -35,6 +46,14 @@ ENV_KEYS = {
     "KLINGAI_AREA": "",
     "KLINGAI_POLL_INTERVAL": "",
     "KLINGAI_REQUEST_TIMEOUT": "",
+    "TENCENT_SECRET_ID": "",
+    "TENCENT_SECRET_KEY": "",
+    "TENCENTCLOUD_SECRET_ID": "",
+    "TENCENTCLOUD_SECRET_KEY": "",
+    "TENCENT_REGION": "",
+    "TENCENT_SUB_APP_ID": "",
+    "TENCENT_POLL_INTERVAL": "",
+    "TENCENT_REQUEST_TIMEOUT": "",
     "OSS_ENDPOINT": "",
     "OSS_ACCESS_KEY_ID": "",
     "OSS_ACCESS_KEY_SECRET": "",
@@ -58,6 +77,15 @@ class BackendConfigTests(unittest.TestCase):
         self.assertIn("4k", kling_nodes.MultiImagesToVideoNode.INPUT_TYPES()["optional"]["mode"][0])
         self.assertNotIn("4k", kling_nodes.MotionControlNode.INPUT_TYPES()["optional"]["mode"][0])
 
+    def test_video_generation_nodes_expose_provider_options(self):
+        image_provider = kling_nodes.Image2VideoNode.INPUT_TYPES()["optional"]["provider"]
+        text_provider = kling_nodes.Text2VideoNode.INPUT_TYPES()["optional"]["provider"]
+
+        self.assertEqual(image_provider[0], kling_nodes.VIDEO_PROVIDER_OPTIONS)
+        self.assertEqual(text_provider[0], kling_nodes.VIDEO_PROVIDER_OPTIONS)
+        self.assertEqual(image_provider[1]["default"], OFFICIAL_PROVIDER)
+        self.assertEqual(text_provider[1]["default"], OFFICIAL_PROVIDER)
+
     def test_kling_v3_accepts_4k_video_mode(self):
         capability = kling_capabilities.validate_video_generation_request(
             task_name="text2video",
@@ -80,37 +108,34 @@ class BackendConfigTests(unittest.TestCase):
         self.assertTrue(capability["supports_sound"])
 
     def test_kling_v3_image2video_sends_selected_sound_value(self):
-        sentinel_client = object()
-        captured_payloads = []
+        captured_requests = []
 
-        @contextmanager
-        def fake_runtime_client():
-            yield sentinel_client
-
-        def fake_run(generator, client):
-            self.assertIs(client, sentinel_client)
-            captured_payloads.append(generator.to_dict())
-            return SimpleNamespace(
-                task_result=SimpleNamespace(
-                    videos=[SimpleNamespace(url="https://example.com/video.mp4", id="video-123")]
+        class FakeProvider:
+            def generate_image2video(self, request):
+                captured_requests.append(request)
+                return SimpleNamespace(
+                    url="https://example.com/video.mp4",
+                    video_id="video-123",
+                    final_unit_deduction=None,
                 )
-            )
 
-        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
-            with mock.patch.object(kling_nodes.Image2Video, "run", fake_run):
-                for sound in ("on", "off"):
-                    with self.subTest(sound=sound):
-                        url, video_id = kling_nodes.Image2VideoNode().generate(
-                            model="kling-v3",
-                            element_list=[{"element_id": "element-123"}],
-                            mode="pro",
-                            duration="3",
-                            sound=sound,
-                        )
-                        self.assertEqual(url, "https://example.com/video.mp4")
-                        self.assertEqual(video_id, "video-123")
+            def close(self):
+                pass
 
-        self.assertEqual([payload["sound"] for payload in captured_payloads], ["on", "off"])
+        with mock.patch.object(kling_nodes, "_create_video_provider", return_value=FakeProvider()):
+            for sound in ("on", "off"):
+                with self.subTest(sound=sound):
+                    url, video_id = kling_nodes.Image2VideoNode().generate(
+                        model="kling-v3",
+                        element_list=[{"element_id": "element-123"}],
+                        mode="pro",
+                        duration="3",
+                        sound=sound,
+                    )
+                    self.assertEqual(url, "https://example.com/video.mp4")
+                    self.assertEqual(video_id, "video-123")
+
+        self.assertEqual([request.sound for request in captured_requests], ["on", "off"])
 
     def test_image2video_custom_voice_id_is_connectable(self):
         custom_voice_input = kling_nodes.Image2VideoNode.INPUT_TYPES()["optional"]["custom_voice_id"]
@@ -716,36 +741,35 @@ class BackendConfigTests(unittest.TestCase):
                 )
 
     def test_image2video_custom_voice_builds_voice_list(self):
-        captured = {}
+        captured_requests = []
 
-        @contextmanager
-        def fake_runtime_client():
-            yield object()
-
-        def fake_run(generator, client):
-            captured["payload"] = generator.to_dict()
-            return SimpleNamespace(
-                task_result=SimpleNamespace(
-                    videos=[SimpleNamespace(url="https://example.com/video.mp4", id="video-voice")]
+        class FakeProvider:
+            def generate_image2video(self, request):
+                captured_requests.append(request)
+                return SimpleNamespace(
+                    url="https://example.com/video.mp4",
+                    video_id="video-voice",
+                    final_unit_deduction=None,
                 )
-            )
 
-        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
+            def close(self):
+                pass
+
+        with mock.patch.object(kling_nodes, "_create_video_provider", return_value=FakeProvider()):
             with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
-                with mock.patch.object(kling_nodes.Image2Video, "run", fake_run):
-                    url, video_id = kling_nodes.Image2VideoNode().generate(
-                        model="kling-v2-6",
-                        image=object(),
-                        prompt='The person <<<voice_1>>> says: "Hello."',
-                        mode="pro",
-                        duration="5",
-                        sound="on",
-                        custom_voice_id="voice-custom",
-                    )
+                url, video_id = kling_nodes.Image2VideoNode().generate(
+                    model="kling-v2-6",
+                    image=object(),
+                    prompt='The person <<<voice_1>>> says: "Hello."',
+                    mode="pro",
+                    duration="5",
+                    sound="on",
+                    custom_voice_id="voice-custom",
+                )
 
         self.assertEqual(url, "https://example.com/video.mp4")
         self.assertEqual(video_id, "video-voice")
-        self.assertEqual(captured["payload"]["voice_list"], [{"voice_id": "voice-custom"}])
+        self.assertEqual(captured_requests[0].voice_list, [{"voice_id": "voice-custom"}])
 
     def test_image2video_custom_voice_validates_required_contract(self):
         common = {
@@ -796,38 +820,244 @@ class BackendConfigTests(unittest.TestCase):
                 )
 
     def test_image2video_surfaces_failed_task_details(self):
-        @contextmanager
-        def fake_runtime_client():
-            yield object()
+        class FakeProvider:
+            def generate_image2video(self, request):
+                raise ValueError(
+                    "Official image2video task task-failed ended with status failed: The input parameters are not correct"
+                )
 
-        failed_response = SimpleNamespace(
-            task_id="task-failed",
-            task_status="failed",
-            task_status_msg="The input parameters are not correct",
-            task_result=SimpleNamespace(videos=[]),
-            final_unit_deduction=0,
+            def close(self):
+                pass
+
+        with mock.patch.object(kling_nodes, "_create_video_provider", return_value=FakeProvider()):
+            with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "task-failed.*The input parameters are not correct",
+                ):
+                    kling_nodes.Image2VideoNode().generate(
+                        model="kling-v2-6",
+                        image=object(),
+                        prompt='The person <<<voice_1>>> says: "Hello."',
+                        mode="pro",
+                        duration="5",
+                        sound="on",
+                        custom_voice_id="voice-custom",
+                    )
+
+    def test_text2video_provider_dispatches_to_official_backend(self):
+        captured_requests = []
+
+        class FakeProvider:
+            def generate_text2video(self, request):
+                captured_requests.append(request)
+                return SimpleNamespace(
+                    url="https://example.com/text.mp4",
+                    video_id="text-123",
+                    final_unit_deduction=1.2,
+                )
+
+            def close(self):
+                pass
+
+        with mock.patch.object(kling_nodes, "_create_video_provider", return_value=FakeProvider()):
+            url, video_id = kling_nodes.Text2VideoNode().generate(
+                model="kling-v3",
+                prompt="A fox is running in snow.",
+                provider=OFFICIAL_PROVIDER,
+                mode="pro",
+                duration="3",
+                aspect_ratio="16:9",
+            )
+
+        self.assertEqual(url, "https://example.com/text.mp4")
+        self.assertEqual(video_id, "text-123")
+        self.assertEqual(captured_requests[0].prompt, "A fox is running in snow.")
+        self.assertEqual(captured_requests[0].mode, "pro")
+        self.assertEqual(captured_requests[0].aspect_ratio, "16:9")
+
+    def test_text2video_tencent_provider_accepts_workflow_fields(self):
+        captured_requests = []
+
+        class FakeProvider:
+            def generate_text2video(self, request):
+                captured_requests.append(request)
+                return SimpleNamespace(url="https://example.com/tencent-text.mp4", video_id="tx-text-123", final_unit_deduction=None)
+
+            def close(self):
+                pass
+
+        with mock.patch.object(kling_nodes, "_create_video_provider", return_value=FakeProvider()):
+            url, video_id = kling_nodes.Text2VideoNode().generate(
+                model="kling-v3",
+                prompt="A fox is running in snow.",
+                provider=TENCENT_VOD_PROVIDER,
+                mode="pro",
+                duration="3",
+                sound="on",
+                shot_type="intelligence",
+                element_list=[{"element_id": "el-1"}],
+            )
+
+        self.assertEqual(url, "https://example.com/tencent-text.mp4")
+        self.assertEqual(video_id, "tx-text-123")
+        self.assertEqual(captured_requests[0].sound, "on")
+        self.assertEqual(captured_requests[0].shot_type, "intelligence")
+        self.assertEqual(captured_requests[0].element_list, [{"element_id": "el-1"}])
+
+    def test_image2video_tencent_provider_accepts_workflow_fields_and_requires_primary_image(self):
+        captured_requests = []
+
+        class FakeProvider:
+            def generate_image2video(self, request):
+                captured_requests.append(request)
+                return SimpleNamespace(url="https://example.com/tencent-image.mp4", video_id="tx-image-123", final_unit_deduction=None)
+
+            def close(self):
+                pass
+
+        common = {
+            "model": "kling-v3",
+            "provider": TENCENT_VOD_PROVIDER,
+            "mode": "pro",
+            "duration": "3",
+        }
+        with self.assertRaisesRegex(ValueError, "requires a primary IMAGE input"):
+            kling_nodes.Image2VideoNode().generate(**common)
+
+        with mock.patch.object(kling_nodes, "_create_video_provider", return_value=FakeProvider()):
+            with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
+                with mock.patch.object(kling_nodes, "_upload_image_batch_references", side_effect=[["https://cdn.example.com/first.png"], ["https://cdn.example.com/tail.png"]]):
+                    url, video_id = kling_nodes.Image2VideoNode().generate(
+                        image=object(),
+                        image_tail=object(),
+                        sound="on",
+                        element_list=[{"element_id": "el-1"}],
+                        **common,
+                    )
+
+        self.assertEqual(url, "https://example.com/tencent-image.mp4")
+        self.assertEqual(video_id, "tx-image-123")
+        self.assertEqual(captured_requests[0].sound, "on")
+        self.assertEqual(captured_requests[0].shot_type, "single")
+        self.assertEqual(captured_requests[0].image_tail_url, "https://cdn.example.com/tail.png")
+
+    def test_tencent_provider_file_infos_and_payload_mapping(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)
         )
 
-        with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
-            with mock.patch.object(kling_nodes, "_image_to_base64", return_value="encoded-image"):
-                with mock.patch.object(
-                    kling_nodes.Image2Video,
-                    "run",
-                    return_value=failed_response,
-                ):
-                    with self.assertRaisesRegex(
-                        ValueError,
-                        "task-failed.*The input parameters are not correct",
-                    ):
-                        kling_nodes.Image2VideoNode().generate(
-                            model="kling-v2-6",
-                            image=object(),
-                            prompt='The person <<<voice_1>>> says: "Hello."',
-                            mode="pro",
-                            duration="5",
-                            sound="on",
-                            custom_voice_id="voice-custom",
-                        )
+        with mock.patch.object(provider, "_create_task", return_value={"TaskId": "task-image"}) as image_create_mock:
+            with mock.patch.object(provider, "_wait_for_video", return_value=SimpleNamespace(url="u", video_id="v")):
+                provider.generate_image2video(
+                    kling_nodes.Image2VideoRequest(
+                        model_name="kling-v3",
+                        image_urls=[
+                            "https://cdn.example.com/a.png",
+                            "https://cdn.example.com/b.png",
+                        ],
+                        image_tail_url="https://cdn.example.com/tail.png",
+                        reference_video="https://cdn.example.com/ref.mp4",
+                        mode="std",
+                        duration="3",
+                    )
+                )
+        image_payload = image_create_mock.call_args[0][0]
+        self.assertEqual(image_payload["FileInfos"][0]["Usage"], "FirstFrame")
+        self.assertEqual(image_payload["FileInfos"][1]["Usage"], "Reference")
+        self.assertEqual(image_payload["FileInfos"][2]["Category"], "Video")
+        self.assertEqual(image_payload["FileInfos"][2]["ReferenceType"], "feature")
+        self.assertEqual(image_payload["LastFrameUrl"], "https://cdn.example.com/tail.png")
+
+        with mock.patch.object(provider, "_create_task", return_value={"TaskId": "task-123"}) as create_mock:
+            with mock.patch.object(provider, "_wait_for_video", return_value=SimpleNamespace(url="u", video_id="v")):
+                provider.generate_text2video(
+                    kling_nodes.Text2VideoRequest(
+                        model_name="kling-v3",
+                        prompt="demo",
+                        mode="pro",
+                        aspect_ratio="9:16",
+                        duration="5",
+                        sound="off",
+                    )
+                )
+
+        payload = create_mock.call_args[0][0]
+        self.assertEqual(payload["GenerationMode"], "Professional")
+        self.assertEqual(payload["OutputConfig"]["AspectRatio"], "9:16")
+        self.assertEqual(payload["OutputConfig"]["Duration"], 5.0)
+        self.assertEqual(payload["OutputConfig"]["AudioGeneration"], "Disabled")
+
+    def test_tencent_provider_merges_extra_payload_and_output_config(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)
+        )
+
+        with mock.patch.object(provider, "_create_task", return_value={"TaskId": "task-extra-123"}) as create_mock:
+            with mock.patch.object(provider, "_wait_for_video", return_value=SimpleNamespace(url="u", video_id="v")):
+                provider.generate_text2video(
+                    kling_nodes.Text2VideoRequest(
+                        model_name="kling-v3",
+                        prompt="demo",
+                        mode="pro",
+                        aspect_ratio="9:16",
+                        duration="5",
+                        sound="on",
+                        cfg_scale=0.8,
+                        extra_payload={
+                            "CfgScale": 0.1,
+                            "CustomField": "demo",
+                        },
+                    )
+                )
+
+        payload = create_mock.call_args[0][0]
+        self.assertEqual(payload["OutputConfig"]["AudioGeneration"], "Enabled")
+        ext_info = json.loads(payload["ExtInfo"])
+        self.assertEqual(ext_info["CfgScale"], 0.8)
+        self.assertEqual(ext_info["CustomField"], "demo")
+
+    def test_tencent_provider_extracts_task_results(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)
+        )
+
+        detail = {
+            "Tasks": [
+                {
+                    "TaskId": "task-123",
+                    "Status": "SUCCESS",
+                    "Output": {
+                        "FileInfos": [
+                            {"FileUrl": "https://example.com/video.mp4", "VideoId": "video-123"}
+                        ]
+                    },
+                }
+            ]
+        }
+        task = provider._extract_task(detail)
+        self.assertEqual(provider._normalize_status(task), "SUCCESS")
+        self.assertEqual(provider._extract_urls(task), ["https://example.com/video.mp4"])
+
+    def test_tencent_provider_wait_for_video_returns_result(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123, poll_interval=0.01, request_timeout=1)
+        )
+
+        with mock.patch.object(provider, "_describe_task", return_value={
+            "TaskId": "task-456",
+            "Status": "SUCCESS",
+            "Output": {
+                "FileInfos": [
+                    {"FileUrl": "https://example.com/final.mp4", "VideoId": "video-456"}
+                ]
+            },
+        }):
+            result = provider._wait_for_video("task-456")
+
+        self.assertEqual(result.url, "https://example.com/final.mp4")
+        self.assertEqual(result.video_id, "video-456")
+        self.assertEqual(result.task_id, "task-456")
 
     def test_example_workflow_links_target_valid_input_slots(self):
         workflow_paths = sorted((REPO_ROOT / "examples").glob("*.json"))
@@ -895,6 +1125,116 @@ class BackendConfigTests(unittest.TestCase):
             self.assertEqual(client._timeout, kling_nodes.DEFAULT_REQUEST_TIMEOUT)
             self.assertEqual(client.poll_interval, kling_nodes.DEFAULT_POLL_INTERVAL)
             self.assertEqual(client._area.name, "GLOBAL")
+
+    def test_video_provider_default_uses_official_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "config.local.json"
+            json_path.write_text(json.dumps({}), encoding="utf-8")
+
+            with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                self.assertEqual(kling_nodes._resolve_video_provider_default(), OFFICIAL_PROVIDER)
+
+    def test_video_provider_default_rejects_unknown_value(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "config.local.json"
+            json_path.write_text(json.dumps({"provider_default": "bad-provider"}), encoding="utf-8")
+
+            with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                with self.assertRaisesRegex(ValueError, "provider_default must be one of"):
+                    kling_nodes._resolve_video_provider_default()
+
+    def test_create_video_provider_returns_official_provider(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "config.local.json"
+            json_path.write_text(
+                json.dumps(
+                    {
+                        "provider_default": OFFICIAL_PROVIDER,
+                        "access_key": "json-ak",
+                        "secret_key": "json-sk",
+                        "area": "china",
+                        "poll_interval": 2.5,
+                        "request_timeout": 45,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                provider = kling_nodes._create_video_provider(OFFICIAL_PROVIDER)
+
+        self.assertIsInstance(provider, OfficialVideoProvider)
+        self.assertEqual(provider._config, OfficialVideoConfig(
+            access_key="json-ak",
+            secret_key="json-sk",
+            in_china=True,
+            timeout=45,
+            poll_interval=2.5,
+        ))
+
+    def test_create_video_provider_returns_tencent_provider(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "config.local.json"
+            json_path.write_text(
+                json.dumps(
+                    {
+                        "provider_default": TENCENT_VOD_PROVIDER,
+                        "tencent_secret_id": "sid",
+                        "tencent_secret_key": "skey",
+                        "tencent_sub_app_id": 123,
+                        "tencent_region": "ap-shanghai",
+                        "tencent_poll_interval": 6,
+                        "tencent_request_timeout": 90,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                provider = kling_nodes._create_video_provider(TENCENT_VOD_PROVIDER)
+
+        self.assertIsInstance(provider, TencentVodVideoProvider)
+        self.assertEqual(provider._config, TencentVodVideoConfig(
+            secret_id="sid",
+            secret_key="skey",
+            sub_app_id=123,
+            region="ap-shanghai",
+            request_timeout=90,
+            poll_interval=6.0,
+        ))
+
+    def test_create_video_provider_requires_tencent_credentials(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "config.local.json"
+            json_path.write_text(json.dumps({"provider_default": TENCENT_VOD_PROVIDER}), encoding="utf-8")
+
+            with mock.patch.dict(os.environ, ENV_KEYS, clear=False):
+                with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                    with self.assertRaisesRegex(ValueError, "Tencent VOD provider requires"):
+                        kling_nodes._create_video_provider(TENCENT_VOD_PROVIDER)
+
+    def test_create_video_provider_accepts_standard_tencent_environment_names(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "config.local.json"
+            json_path.write_text(
+                json.dumps({
+                    "tencent_sub_app_id": 123,
+                    "tencent_max_wait_seconds": 2400,
+                }),
+                encoding="utf-8",
+            )
+            environment = dict(ENV_KEYS)
+            environment.update({
+                "TENCENTCLOUD_SECRET_ID": "cloud-sid",
+                "TENCENTCLOUD_SECRET_KEY": "cloud-skey",
+            })
+            with mock.patch.dict(os.environ, environment, clear=False):
+                with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                    provider = kling_nodes._create_video_provider(TENCENT_VOD_PROVIDER)
+
+        self.assertEqual(provider._config.secret_id, "cloud-sid")
+        self.assertEqual(provider._config.secret_key, "cloud-skey")
+        self.assertEqual(provider._config.max_wait_seconds, 2400)
 
     def test_video_extend_uses_backend_runtime_client(self):
         sentinel_client = object()
@@ -1634,6 +1974,8 @@ class BackendConfigTests(unittest.TestCase):
             self.assertIsInstance(data, dict)
             self.assertNotIn("Comfyui-Kling-Wrapper Client", content)
             self.assertNotIn("COMFYUI_KLING_WRAPPER_API_CLIENT", content)
+            if example_path.name.startswith(tuple(f"{index:02d}_" for index in range(21, 28))):
+                self.assertIn('"tencent_vod"', content)
             if example_path.name == "07_comfyui_kling_wrapper_motion_control_v26.json":
                 self.assertIn("\"type\": \"LoadVideo\"", content)
                 self.assertIn("\"reference_video_input\"", content)
@@ -1652,7 +1994,8 @@ class BackendConfigTests(unittest.TestCase):
                     if node_input["name"] == "audio"
                 )
                 self.assertIsNotNone(audio_input["link"])
-                self.assertEqual(custom_voice_node["widgets_values"][1], "")
+                self.assertEqual(custom_voice_node["widgets_values"][1], "official")
+                self.assertEqual(custom_voice_node["widgets_values"][2], "")
 
                 preview_audio_node = node_by_type["Comfyui-Kling-Wrapper Preview Audio"]
                 preview_audio_link = next(
@@ -1662,6 +2005,274 @@ class BackendConfigTests(unittest.TestCase):
                 )
                 source_link = next(link for link in data["links"] if link[0] == preview_audio_link)
                 self.assertEqual(source_link[2], 2)
+
+    def test_tencent_extended_nodes_are_registered_and_expose_provider(self):
+        mappings = kling_package.NODE_CLASS_MAPPINGS
+        self.assertIn("Comfyui-Kling-Wrapper Multi Modal Video Edit", mappings)
+        self.assertIn("Comfyui-Kling-Wrapper Advanced Element Delete", mappings)
+        for node_class in (
+            kling_nodes.MultiImagesToVideoNode,
+            kling_nodes.MotionControlNode,
+            kling_nodes.AdvancedCustomElementCreateNode,
+            kling_nodes.AdvancedCustomElementQueryNode,
+            kling_nodes.CustomVoiceCreateNode,
+            kling_nodes.CustomVoiceQueryNode,
+            kling_nodes.MultiModalVideoEditNode,
+        ):
+            self.assertEqual(
+                node_class.INPUT_TYPES()["optional"]["provider"][0],
+                kling_nodes.VIDEO_PROVIDER_OPTIONS,
+            )
+
+    def test_tencent_multi_image_motion_and_multimodal_payloads(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)
+        )
+
+        captured = []
+
+        def capture(payload):
+            captured.append(payload)
+            return {"TaskId": f"task-{len(captured)}"}
+
+        result = SimpleNamespace(url="u", video_id="v")
+        with mock.patch.object(provider, "_create_task", side_effect=capture):
+            with mock.patch.object(provider, "_wait_for_video", return_value=result):
+                provider.generate_multi_images(
+                    kling_providers.MultiImagesToVideoRequest(
+                        model_name="kling-v3",
+                        prompt="demo",
+                        mode="std",
+                        duration="5",
+                        image_urls=["https://a.png", "https://b.png"],
+                    )
+                )
+                provider.generate_motion_control(
+                    kling_providers.MotionControlRequest(
+                        model_name="kling-v2-6",
+                        image_url="https://image.png",
+                        video_url="https://motion.mp4",
+                        prompt="move",
+                        mode="std",
+                        duration="3",
+                        keep_original_sound=False,
+                    )
+                )
+                provider.generate_multimodal_edit(
+                    kling_providers.MultiModalVideoEditRequest(
+                        model_name="kling-v3-omni",
+                        video_url="https://base.mp4",
+                        prompt="replace the coat",
+                        edit_mode="base",
+                        mode="std",
+                        duration="3",
+                        image_urls=["https://reference.png"],
+                    )
+                )
+
+        self.assertEqual(
+            [item["Usage"] for item in captured[0]["FileInfos"]],
+            ["Reference", "Reference"],
+        )
+        self.assertEqual(captured[1]["SceneType"], "motion_control")
+        self.assertEqual(captured[1]["FileInfos"][0]["Usage"], "FirstFrame")
+        self.assertEqual(captured[1]["FileInfos"][1]["Usage"], "Reference")
+        self.assertEqual(captured[1]["FileInfos"][1]["ReferenceType"], "feature")
+        self.assertEqual(captured[1]["FileInfos"][1]["KeepOriginalSound"], "Disabled")
+        self.assertEqual(captured[2]["ModelVersion"], "3.0-Omni")
+        self.assertEqual(captured[2]["FileInfos"][0]["Usage"], "Reference")
+        self.assertEqual(captured[2]["FileInfos"][0]["ReferenceType"], "base")
+        self.assertEqual(captured[2]["FileInfos"][1]["Usage"], "Reference")
+
+        with self.assertRaisesRegex(ValueError, "supports duration 5 or 10"):
+            provider.generate_multi_images(
+                kling_providers.MultiImagesToVideoRequest(
+                    model_name="kling-v3",
+                    prompt="demo",
+                    mode="std",
+                    duration="3",
+                    image_urls=["https://a.png", "https://b.png"],
+                )
+            )
+
+    def test_tencent_subject_create_query_delete_wire_mapping(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)
+        )
+        task = {
+            "TaskId": "task-element",
+            "Status": "FINISH",
+            "ErrCode": 0,
+            "ErrCodeExt": "",
+            "Output": {
+                "InfoList": [{
+                    "ElementId": "element-123",
+                    "ElementInfo": json.dumps({
+                        "element_id": "element-123",
+                        "element_name": "Demo",
+                    }),
+                }]
+            },
+        }
+        with mock.patch.object(
+            provider,
+            "_request",
+            return_value={"TaskId": "task-element", "RequestId": "request-create"},
+        ) as request_mock:
+            with mock.patch.object(provider, "_wait_for_task", return_value=task):
+                result = provider.create_element(
+                    kling_providers.AdvancedElementCreateRequest(
+                        element_name="Demo",
+                        element_description="Demo subject",
+                        reference_type="image_refer",
+                        element_voice_id="voice-123",
+                        element_image_list={
+                            "frontal_image": "https://front.png",
+                            "refer_images": [{"image_url": "https://side.png"}],
+                        },
+                        tag_list=[{"tag_id": "o_102"}],
+                    )
+                )
+        action, payload = request_mock.call_args[0]
+        self.assertEqual(action, "CreateAigcAdvancedCustomElement")
+        self.assertIsInstance(payload["ElementImageList"], str)
+        self.assertIsInstance(payload["TagList"], str)
+        self.assertEqual(payload["ElementVoiceId"], "voice-123")
+        self.assertEqual(result.element_id, "element-123")
+
+        with mock.patch.object(provider, "_request", return_value={
+            "ElementSet": [{
+                "Id": "element-123",
+                "Name": "Demo",
+                "Description": "Demo subject",
+                "CreateTime": "2026-07-03T00:00:00Z",
+            }],
+            "TotalCount": 1,
+            "RequestId": "request-query",
+        }):
+            queried = provider.query_element("element_id", "element-123")
+        self.assertEqual(queried.element["element_name"], "Demo")
+
+        with mock.patch.object(
+            provider,
+            "_request",
+            return_value={"RequestId": "request-delete"},
+        ) as delete_mock:
+            request_id = provider.delete_element("element-123")
+        self.assertEqual(delete_mock.call_args[0][0], "DeleteAigcAdvancedCustomElement")
+        self.assertEqual(request_id, "request-delete")
+
+    def test_tencent_custom_voice_create_and_query_parse_voice_info(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)
+        )
+        task = {
+            "TaskId": "task-voice",
+            "Status": "FINISH",
+            "ErrCode": 0,
+            "ErrCodeExt": "",
+            "Output": {
+                "InfoList": [{
+                    "VoiceId": "voice-123",
+                    "VoiceInfo": json.dumps({
+                        "voice_id": "voice-123",
+                        "voice_name": "Demo Voice",
+                        "trial_url": "https://trial.mp3",
+                        "status": "succeed",
+                    }),
+                }]
+            },
+        }
+        with mock.patch.object(
+            provider,
+            "_request",
+            return_value={"TaskId": "task-voice", "RequestId": "request-voice"},
+        ) as request_mock:
+            with mock.patch.object(provider, "_wait_for_task", return_value=task):
+                created = provider.create_custom_voice(
+                    kling_providers.CustomVoiceCreateRequest(
+                        voice_name="Demo Voice",
+                        voice_url="https://voice.mp3",
+                    )
+                )
+        action, payload = request_mock.call_args[0]
+        self.assertEqual(action, "CreateAigcCustomVoice")
+        self.assertEqual(payload["VoiceUrl"], "https://voice.mp3")
+        self.assertNotIn("VideoId", payload)
+        self.assertEqual(created.voice["trial_url"], "https://trial.mp3")
+
+        with mock.patch.object(provider, "_wait_for_task", return_value=task):
+            queried = provider.query_custom_voice("task-voice")
+        self.assertEqual(queried.voice["voice_id"], "voice-123")
+
+    def test_tencent_terminal_task_error_and_unknown_model_are_not_silent(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(
+                secret_id="sid",
+                secret_key="skey",
+                sub_app_id=123,
+                poll_interval=0.01,
+                max_wait_seconds=30,
+            )
+        )
+        with mock.patch.object(provider, "_describe_task", return_value={
+            "AigcVideoTask": {
+                "TaskId": "task-failed",
+                "Status": "FINISH",
+                "ErrCode": 1001,
+                "ErrCodeExt": "InvalidParameterValue",
+                "Message": "bad input",
+            }
+        }):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "task-failed.*InvalidParameterValue.*bad input",
+            ):
+                provider._wait_for_video("task-failed")
+        with self.assertRaisesRegex(ValueError, "Unsupported Tencent VOD Kling model"):
+            provider.generate_text2video(
+                kling_providers.Text2VideoRequest(
+                    model_name="unknown-model",
+                    prompt="demo",
+                )
+            )
+
+    def test_official_image2video_keeps_reference_images_as_base64(self):
+        seen = {}
+
+        class FakeImage2Video:
+            def run(self, client):
+                seen["image_list"] = self.image_list
+                return SimpleNamespace(
+                    task_id="task-official",
+                    task_status="succeed",
+                    task_status_msg="",
+                    final_unit_deduction=1,
+                    task_result=SimpleNamespace(
+                        videos=[SimpleNamespace(id="video-1", url="https://video.mp4")]
+                    ),
+                )
+
+        class DummyClient:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        provider = OfficialVideoProvider(
+            OfficialVideoConfig(access_key="ak", secret_key="sk")
+        )
+        with mock.patch("py.api.providers.official.video.Image2Video", FakeImage2Video):
+            with mock.patch.object(provider, "_make_client", return_value=DummyClient()):
+                provider.generate_image2video(
+                    kling_providers.Image2VideoRequest(
+                        model_name="kling-v3",
+                        image_base64="primary-base64",
+                        image_list=["reference-base64"],
+                    )
+                )
+        self.assertEqual(seen["image_list"], ["reference-base64"])
 
 
 if __name__ == "__main__":

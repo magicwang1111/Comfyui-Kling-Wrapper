@@ -236,7 +236,8 @@ def image_generator_node(node_id, pos, order):
 
 
 def text2video_node(node_id, pos, order, model, prompt, mode="pro", aspect_ratio="16:9", duration="5",
-                    sound="off", voice_preset="None", shot_type="single", reference_video=""):
+                    sound="off", voice_preset="None", shot_type="single", reference_video="",
+                    provider="official"):
     type_name = f"{NODE_PREFIX} Text2Video"
     return node(
         node_id,
@@ -247,6 +248,7 @@ def text2video_node(node_id, pos, order, model, prompt, mode="pro", aspect_ratio
         [
             model,
             prompt,
+            provider,
             "",
             0.5,
             mode,
@@ -280,6 +282,7 @@ def image2video_node(
         reference_video="",
         sound="off",
         voice_preset="None",
+        provider="official",
 ):
     type_name = f"{NODE_PREFIX} Image2Video"
     return node(
@@ -290,6 +293,7 @@ def image2video_node(
         order,
         [
             model,
+            provider,
             prompt,
             "",
             0.5,
@@ -316,7 +320,7 @@ def image2video_node(
     )
 
 
-def multi_images_to_video_node(node_id, pos, order):
+def multi_images_to_video_node(node_id, pos, order, provider="official"):
     type_name = f"{NODE_PREFIX} Multi Images To Video"
     return node(
         node_id,
@@ -326,6 +330,7 @@ def multi_images_to_video_node(node_id, pos, order):
         order,
         [
             "kling-v3",
+            provider,
             "Keep the same person identity across the shot while the subject turns toward camera and smiles naturally.",
             "",
             "pro",
@@ -432,7 +437,7 @@ def text_to_audio_node(node_id, pos, order):
     )
 
 
-def custom_voice_create_node(node_id, pos, order):
+def custom_voice_create_node(node_id, pos, order, provider="official"):
     type_name = f"{NODE_PREFIX} Custom Voice Create"
     return node(
         node_id,
@@ -440,7 +445,7 @@ def custom_voice_create_node(node_id, pos, order):
         pos,
         [390, 260],
         order,
-        ["Demo Voice", "", "", "", "", ""],
+        ["Demo Voice", provider, "", "", "", "", ""],
         inputs=[input_slot("audio", "AUDIO")],
         outputs=[
             output_slot("voice_id", "STRING", slot_index=0),
@@ -582,7 +587,7 @@ def effects_node(node_id, pos, order):
     )
 
 
-def advanced_element_create_node(node_id, pos, order):
+def advanced_element_create_node(node_id, pos, order, provider="official"):
     type_name = f"{NODE_PREFIX} Advanced Element Create"
     return node(
         node_id,
@@ -594,6 +599,7 @@ def advanced_element_create_node(node_id, pos, order):
             "image_subject",
             "demo_subject",
             "A clear portrait of the subject with consistent identity traits for reuse in video generation.",
+            provider,
             "",
             "",
             "",
@@ -628,7 +634,7 @@ def element_list_builder_node(node_id, pos, order):
     )
 
 
-def motion_control_node(node_id, pos, order):
+def motion_control_node(node_id, pos, order, provider="official"):
     type_name = f"{NODE_PREFIX} Motion Control"
     return node(
         node_id,
@@ -638,6 +644,8 @@ def motion_control_node(node_id, pos, order):
         order,
         [
             "kling-v2-6",
+            provider,
+            "",
             "Transfer the body motion naturally while keeping the subject stable and realistic.",
             "",
             "pro",
@@ -650,6 +658,35 @@ def motion_control_node(node_id, pos, order):
             input_slot("reference_image", "IMAGE"),
             input_slot("reference_video_input", "VIDEO"),
         ],
+        outputs=[
+            output_slot("url", "STRING", slot_index=0),
+            output_slot("video_id", "STRING", slot_index=1),
+        ],
+    )
+
+
+def multimodal_video_edit_node(node_id, pos, order, provider="tencent_vod"):
+    type_name = f"{NODE_PREFIX} Multi Modal Video Edit"
+    return node(
+        node_id,
+        type_name,
+        pos,
+        [470, 460],
+        order,
+        [
+            "kling-v3-omni",
+            "Replace the subject's coat with the garment shown in the reference image while preserving motion and camera movement.",
+            provider,
+            "https://example.com/base-video.mp4",
+            "",
+            "base",
+            False,
+            "std",
+            "3",
+            "16:9",
+            "",
+        ],
+        inputs=[input_slot("image_list", "IMAGE", None)],
         outputs=[
             output_slot("url", "STRING", slot_index=0),
             output_slot("video_id", "STRING", slot_index=1),
@@ -674,6 +711,7 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 
 - Create and fill in `config.local.json` in the repository root before importing the workflows.
 - You can copy `config.example.json` in the repository root as a starting template.
+- For Tencent VOD workflows, set `tencent_secret_id`, `tencent_secret_key`, and `tencent_sub_app_id`, or use the `TENCENTCLOUD_SECRET_ID` and `TENCENTCLOUD_SECRET_KEY` environment variables.
 - Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, `example_scene.png`, `example_lipsync_source.mp4`, `example_lipsync_audio.wav`, and `example_voice_reference.mp3` with files that exist in your ComfyUI input directory.
 - Replace placeholder URLs such as `https://example.com/reference-motion.mp4` with real URLs when needed.
 - Native preset and cloned voices are available for `kling-v2-6`; the active API rejects `voice_list` for `kling-v3`.
@@ -711,6 +749,13 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `18_comfyui_kling_wrapper_custom_voice_tts_preview.json`: create a custom voice and preview its returned `trial_url`.
 - `19_comfyui_kling_wrapper_avatar_from_uploaded_audio_image.json`: create an Avatar video from one image and uploaded audio.
 - `20_comfyui_kling_wrapper_custom_voice_image2video.json`: clone a voice and connect its `voice_id` to Kling v2.6 image-to-video.
+- `21_tencent_vod_text2video.json`: minimal Tencent VOD text-to-video workflow.
+- `22_tencent_vod_image2video.json`: minimal Tencent VOD image-to-video workflow.
+- `23_tencent_vod_multi_images_to_video.json`: Tencent VOD multi-image reference generation.
+- `24_tencent_vod_motion_control.json`: Tencent VOD motion-control workflow.
+- `25_tencent_vod_multimodal_video_edit.json`: Tencent VOD 3.0-Omni video editing with an image reference.
+- `26_tencent_vod_advanced_element_create.json`: Tencent VOD advanced subject creation.
+- `27_tencent_vod_custom_voice_create.json`: Tencent VOD custom voice creation and trial preview.
 - `api_examples.py`: small Python snippets that mirror the same upgraded API wrappers.
 """
     (ROOT / "README.md").write_text(content, encoding="utf-8")
@@ -1293,6 +1338,134 @@ def generate_workflows():
     nodes[3]["inputs"][3]["link"] = 3
     nodes[3]["outputs"][0]["links"] = [4]
     examples["20_comfyui_kling_wrapper_custom_voice_image2video.json"] = workflow(nodes, links)
+
+    nodes = [
+        text2video_node(
+            1,
+            [60, 60],
+            0,
+            "kling-v3",
+            "A red fox runs through fresh snow, cinematic natural motion.",
+            mode="std",
+            duration="3",
+            provider="tencent_vod",
+        ),
+        preview_video_node(2, [580, 60], 1, 1),
+    ]
+    links = [link(1, 1, 0, 2, 0, "STRING")]
+    nodes[0]["outputs"][0]["links"] = [1]
+    examples["21_tencent_vod_text2video.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_image_node(1, "example_portrait.png", [40, 60], 0),
+        image2video_node(
+            2,
+            [390, 60],
+            1,
+            "kling-v3",
+            "The subject turns toward camera while the clothing moves naturally.",
+            mode="std",
+            duration="3",
+            provider="tencent_vod",
+        ),
+        preview_video_node(3, [900, 60], 2, 2),
+    ]
+    links = [
+        link(1, 1, 0, 2, 1, "IMAGE"),
+        link(2, 2, 0, 3, 0, "STRING"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["inputs"][1]["link"] = 1
+    nodes[1]["outputs"][0]["links"] = [2]
+    examples["22_tencent_vod_image2video.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_image_node(1, "example_subject_a.png", [40, 40], 0),
+        load_image_node(2, "example_subject_b.png", [40, 420], 1),
+        image_batch_node(3, [390, 230], 2),
+        multi_images_to_video_node(4, [730, 160], 3, provider="tencent_vod"),
+        preview_video_node(5, [1220, 160], 4, 4),
+    ]
+    links = [
+        link(1, 1, 0, 3, 0, "IMAGE"),
+        link(2, 2, 0, 3, 1, "IMAGE"),
+        link(3, 3, 0, 4, 1, "IMAGE"),
+        link(4, 4, 0, 5, 0, "STRING"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["outputs"][0]["links"] = [2]
+    nodes[2]["inputs"][0]["link"] = 1
+    nodes[2]["inputs"][1]["link"] = 2
+    nodes[2]["outputs"][0]["links"] = [3]
+    nodes[3]["inputs"][1]["link"] = 3
+    nodes[3]["outputs"][0]["links"] = [4]
+    examples["23_tencent_vod_multi_images_to_video.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_image_node(1, "example_portrait.png", [40, 40], 0),
+        load_video_node(2, "example_motion_reference.mp4", [40, 420], 1),
+        motion_control_node(3, [430, 170], 2, provider="tencent_vod"),
+        preview_video_node(4, [930, 170], 3, 3),
+    ]
+    links = [
+        link(1, 1, 0, 3, 0, "IMAGE"),
+        link(2, 2, 0, 3, 1, "VIDEO"),
+        link(3, 3, 0, 4, 0, "STRING"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["outputs"][0]["links"] = [2]
+    nodes[2]["inputs"][0]["link"] = 1
+    nodes[2]["inputs"][1]["link"] = 2
+    nodes[2]["outputs"][0]["links"] = [3]
+    examples["24_tencent_vod_motion_control.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_image_node(1, "example_garment_reference.png", [40, 120], 0),
+        multimodal_video_edit_node(2, [410, 80], 1),
+        preview_video_node(3, [940, 80], 2, 2),
+    ]
+    links = [
+        link(1, 1, 0, 2, 0, "IMAGE"),
+        link(2, 2, 0, 3, 0, "STRING"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["inputs"][0]["link"] = 1
+    nodes[1]["outputs"][0]["links"] = [2]
+    examples["25_tencent_vod_multimodal_video_edit.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_image_node(1, "example_subject_front.png", [40, 40], 0),
+        load_image_node(2, "example_subject_ref_1.png", [40, 420], 1),
+        image_batch_node(3, [390, 230], 2),
+        advanced_element_create_node(4, [730, 150], 3, provider="tencent_vod"),
+    ]
+    links = [
+        link(1, 1, 0, 4, 1, "IMAGE"),
+        link(2, 2, 0, 3, 0, "IMAGE"),
+        link(3, 3, 0, 4, 2, "IMAGE"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["outputs"][0]["links"] = [2]
+    nodes[2]["inputs"][0]["link"] = 2
+    nodes[2]["outputs"][0]["links"] = [3]
+    nodes[3]["inputs"][1]["link"] = 1
+    nodes[3]["inputs"][2]["link"] = 3
+    examples["26_tencent_vod_advanced_element_create.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_audio_node(1, "example_voice_reference.mp3", [40, 80], 0),
+        custom_voice_create_node(2, [420, 80], 1, provider="tencent_vod"),
+        preview_audio_node(3, [880, 120], 2, 2),
+    ]
+    links = [
+        link(1, 1, 0, 2, 0, "AUDIO"),
+        link(2, 2, 2, 3, 0, "STRING"),
+    ]
+    nodes[0]["outputs"][0]["links"] = [1]
+    nodes[1]["inputs"][0]["link"] = 1
+    nodes[1]["outputs"][2]["links"] = [2]
+    nodes[2]["inputs"][0]["link"] = 2
+    examples["27_tencent_vod_custom_voice_create.json"] = workflow(nodes, links)
 
     for name, data in examples.items():
         write_json(name, strip_client_dependency(data))

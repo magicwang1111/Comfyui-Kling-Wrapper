@@ -248,6 +248,7 @@
         "image_subject",
         "demo_subject",
         "A clear portrait of the subject with consistent identity traits for reuse in video generation.",
+        "official",
         "",
         "",
         ""
@@ -354,6 +355,7 @@
       },
       "widgets_values": [
         "kling-v3",
+        "official",
         "Keep the same subject identity while the camera slowly moves and the background remains coherent.",
         "",
         0.5,
