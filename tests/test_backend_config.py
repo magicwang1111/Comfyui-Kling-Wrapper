@@ -64,6 +64,17 @@ ENV_KEYS = {
 
 
 class BackendConfigTests(unittest.TestCase):
+    def setUp(self):
+        # Unit tests must not inherit the developer machine's active provider
+        # or credentials from config.local.json.
+        config_patch = mock.patch.object(
+            kling_nodes,
+            "CONFIG_JSON_PATH",
+            REPO_ROOT / "tests" / "__missing_config.local.json",
+        )
+        config_patch.start()
+        self.addCleanup(config_patch.stop)
+
     def test_node_mapping_hides_client_node(self):
         self.assertNotIn(
             "Comfyui-Kling-Wrapper Client",
@@ -77,14 +88,22 @@ class BackendConfigTests(unittest.TestCase):
         self.assertIn("4k", kling_nodes.MultiImagesToVideoNode.INPUT_TYPES()["optional"]["mode"][0])
         self.assertNotIn("4k", kling_nodes.MotionControlNode.INPUT_TYPES()["optional"]["mode"][0])
 
-    def test_video_generation_nodes_expose_provider_options(self):
-        image_provider = kling_nodes.Image2VideoNode.INPUT_TYPES()["optional"]["provider"]
-        text_provider = kling_nodes.Text2VideoNode.INPUT_TYPES()["optional"]["provider"]
-
-        self.assertEqual(image_provider[0], kling_nodes.VIDEO_PROVIDER_OPTIONS)
-        self.assertEqual(text_provider[0], kling_nodes.VIDEO_PROVIDER_OPTIONS)
-        self.assertEqual(image_provider[1]["default"], OFFICIAL_PROVIDER)
-        self.assertEqual(text_provider[1]["default"], OFFICIAL_PROVIDER)
+    def test_provider_is_hidden_from_all_node_inputs(self):
+        for node_class in (
+            kling_nodes.Image2VideoNode,
+            kling_nodes.Text2VideoNode,
+            kling_nodes.MultiImagesToVideoNode,
+            kling_nodes.MultiModalVideoEditNode,
+            kling_nodes.AdvancedCustomElementCreateNode,
+            kling_nodes.AdvancedCustomElementQueryNode,
+            kling_nodes.AdvancedCustomElementDeleteNode,
+            kling_nodes.MotionControlNode,
+            kling_nodes.CustomVoiceCreateNode,
+            kling_nodes.CustomVoiceQueryNode,
+        ):
+            input_types = node_class.INPUT_TYPES()
+            self.assertNotIn("provider", input_types.get("required", {}))
+            self.assertNotIn("provider", input_types.get("optional", {}))
 
     def test_kling_v3_accepts_4k_video_mode(self):
         capability = kling_capabilities.validate_video_generation_request(
@@ -1134,6 +1153,40 @@ class BackendConfigTests(unittest.TestCase):
             with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
                 self.assertEqual(kling_nodes._resolve_video_provider_default(), OFFICIAL_PROVIDER)
 
+    def test_node_uses_provider_default_from_backend_config(self):
+        class FakeProvider:
+            def generate_text2video(self, request):
+                return SimpleNamespace(
+                    url="https://example.com/video.mp4",
+                    video_id="video-1",
+                    final_unit_deduction=None,
+                )
+
+            def close(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "config.local.json"
+            json_path.write_text(
+                json.dumps({"provider_default": TENCENT_VOD_PROVIDER}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                with mock.patch.object(
+                    kling_nodes,
+                    "_create_video_provider",
+                    return_value=FakeProvider(),
+                ) as create_provider:
+                    result = kling_nodes.Text2VideoNode().generate(
+                        model="kling-v3",
+                        prompt="A fox runs through snow.",
+                        mode="std",
+                        duration="3",
+                    )
+
+        self.assertEqual(result, ("https://example.com/video.mp4", "video-1"))
+        create_provider.assert_called_once_with(TENCENT_VOD_PROVIDER)
+
     def test_video_provider_default_rejects_unknown_value(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             json_path = Path(tmpdir) / "config.local.json"
@@ -1974,8 +2027,7 @@ class BackendConfigTests(unittest.TestCase):
             self.assertIsInstance(data, dict)
             self.assertNotIn("Comfyui-Kling-Wrapper Client", content)
             self.assertNotIn("COMFYUI_KLING_WRAPPER_API_CLIENT", content)
-            if example_path.name.startswith(tuple(f"{index:02d}_" for index in range(21, 28))):
-                self.assertIn('"tencent_vod"', content)
+            self.assertNotIn('"tencent_vod"', content)
             if example_path.name == "07_comfyui_kling_wrapper_motion_control_v26.json":
                 self.assertIn("\"type\": \"LoadVideo\"", content)
                 self.assertIn("\"reference_video_input\"", content)
@@ -1994,8 +2046,7 @@ class BackendConfigTests(unittest.TestCase):
                     if node_input["name"] == "audio"
                 )
                 self.assertIsNotNone(audio_input["link"])
-                self.assertEqual(custom_voice_node["widgets_values"][1], "official")
-                self.assertEqual(custom_voice_node["widgets_values"][2], "")
+                self.assertEqual(custom_voice_node["widgets_values"][1], "")
 
                 preview_audio_node = node_by_type["Comfyui-Kling-Wrapper Preview Audio"]
                 preview_audio_link = next(
@@ -2006,7 +2057,7 @@ class BackendConfigTests(unittest.TestCase):
                 source_link = next(link for link in data["links"] if link[0] == preview_audio_link)
                 self.assertEqual(source_link[2], 2)
 
-    def test_tencent_extended_nodes_are_registered_and_expose_provider(self):
+    def test_tencent_extended_nodes_are_registered_without_provider_widget(self):
         mappings = kling_package.NODE_CLASS_MAPPINGS
         self.assertIn("Comfyui-Kling-Wrapper Multi Modal Video Edit", mappings)
         self.assertIn("Comfyui-Kling-Wrapper Advanced Element Delete", mappings)
@@ -2019,10 +2070,9 @@ class BackendConfigTests(unittest.TestCase):
             kling_nodes.CustomVoiceQueryNode,
             kling_nodes.MultiModalVideoEditNode,
         ):
-            self.assertEqual(
-                node_class.INPUT_TYPES()["optional"]["provider"][0],
-                kling_nodes.VIDEO_PROVIDER_OPTIONS,
-            )
+            input_types = node_class.INPUT_TYPES()
+            self.assertNotIn("provider", input_types.get("required", {}))
+            self.assertNotIn("provider", input_types.get("optional", {}))
 
     def test_tencent_multi_image_motion_and_multimodal_payloads(self):
         provider = TencentVodVideoProvider(

@@ -355,6 +355,13 @@ def _resolve_video_provider_default(config_data=None):
     return provider
 
 
+def _resolve_video_provider(provider_name=None):
+    provider = str(provider_name or _resolve_video_provider_default()).strip().lower()
+    if provider not in VIDEO_PROVIDER_OPTIONS:
+        raise ValueError(f"provider must be one of: {', '.join(VIDEO_PROVIDER_OPTIONS)}")
+    return provider
+
+
 def _resolve_tencent_secret_id(config_data):
     return _config_or_env_value(
         config_data,
@@ -1924,7 +1931,6 @@ class Image2VideoNode:
                 "model": (IMAGE_TO_VIDEO_MODELS,),
             },
             "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "image": ("IMAGE",),
                 "image_tail": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
@@ -1972,7 +1978,7 @@ class Image2VideoNode:
 
     def generate(self,
                  model,
-                 provider=OFFICIAL_PROVIDER,
+                 provider=None,
                  image=None,
                  image_tail=None,
                  prompt=None,
@@ -1990,6 +1996,7 @@ class Image2VideoNode:
                  image_list=None,
                  element_list=None,
                  reference_video=""):
+        provider = _resolve_video_provider(provider)
         capability = get_video_capability(model)
         mode = _normalize_requested_mode(model, capability, mode)
         normalized_element_list = _normalize_element_list(element_list)
@@ -2080,7 +2087,6 @@ class Text2VideoNode:
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
             },
             "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
                 "cfg_scale": ("FLOAT", {
                     "default": 0.5,
@@ -2126,7 +2132,7 @@ class Text2VideoNode:
     def generate(self,
                  model,
                  prompt,
-                 provider=OFFICIAL_PROVIDER,
+                 provider=None,
                  negative_prompt=None,
                  cfg_scale=None,
                  mode=None,
@@ -2141,6 +2147,7 @@ class Text2VideoNode:
                  image_list=None,
                  element_list=None,
                  reference_video=""):
+        provider = _resolve_video_provider(provider)
         capability = get_video_capability(model)
         mode = _normalize_requested_mode(model, capability, mode)
         normalized_element_list = _normalize_element_list(element_list)
@@ -2917,7 +2924,6 @@ class MultiImagesToVideoNode:
                 "image_list": ("IMAGE",),
             },
             "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "image_tail": ("IMAGE",),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
@@ -2937,7 +2943,7 @@ class MultiImagesToVideoNode:
             self,
             model,
             image_list,
-            provider=OFFICIAL_PROVIDER,
+            provider=None,
             image_tail=None,
             prompt="",
             negative_prompt="",
@@ -2945,6 +2951,7 @@ class MultiImagesToVideoNode:
             duration="5",
             aspect_ratio="16:9",
     ):
+        provider = _resolve_video_provider(provider)
         capability = get_video_capability(model)
         mode = _normalize_requested_mode(model, capability, mode)
         encoded_image_list = _image_batch_to_base64_list(image_list)
@@ -3015,7 +3022,6 @@ class MultiModalVideoEditNode:
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
             },
             "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "reference_video": ("STRING", {"multiline": False, "default": ""}),
                 "reference_video_input": ("VIDEO",),
                 "reference_video_frames": ("IMAGE",),
@@ -3041,7 +3047,7 @@ class MultiModalVideoEditNode:
             self,
             model,
             prompt,
-            provider=OFFICIAL_PROVIDER,
+            provider=None,
             reference_video="",
             reference_video_input=None,
             reference_video_frames=None,
@@ -3055,6 +3061,7 @@ class MultiModalVideoEditNode:
             aspect_ratio="16:9",
             extra_payload_json="",
     ):
+        provider = _resolve_video_provider(provider)
         reference_video = _resolve_motion_control_reference_video(
             reference_video,
             reference_video_input=reference_video_input,
@@ -3118,7 +3125,6 @@ class AdvancedCustomElementCreateNode:
                 "element_description": ("STRING", {"multiline": True, "default": ""}),
             },
             "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "image": ("IMAGE",),
                 "image_list": ("IMAGE",),
                 "video_url": ("STRING", {"multiline": False, "default": ""}),
@@ -3138,13 +3144,14 @@ class AdvancedCustomElementCreateNode:
             element_type,
             element_name="",
             element_description="",
-            provider=OFFICIAL_PROVIDER,
+            provider=None,
             image=None,
             image_list=None,
             video_url="",
             element_voice_id="",
             extra_payload_json="",
     ):
+        provider = _resolve_video_provider(provider)
         generator = AdvancedCustomElements()
         element_name = (element_name or "").strip()
         element_description = (element_description or "").strip()
@@ -3279,9 +3286,6 @@ class AdvancedCustomElementQueryNode:
                 "query_mode": (["task_id", "element_id"],),
                 "identifier": ("STRING", {"multiline": False, "default": ""}),
             },
-            "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
-            },
         }
 
     RETURN_TYPES = (ELEMENT_TYPE, "STRING", "STRING")
@@ -3290,7 +3294,8 @@ class AdvancedCustomElementQueryNode:
     OUTPUT_NODE = False
     CATEGORY = NODE_CATEGORY
 
-    def query(self, query_mode, identifier, provider=OFFICIAL_PROVIDER):
+    def query(self, query_mode, identifier, provider=None):
+        provider = _resolve_video_provider(provider)
         identifier = identifier.strip()
         if not identifier:
             raise ValueError("identifier is required.")
@@ -3355,9 +3360,6 @@ class AdvancedCustomElementDeleteNode:
             "required": {
                 "element_id": ("STRING", {"multiline": False, "default": ""}),
             },
-            "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
-            },
         }
 
     RETURN_TYPES = ("STRING", "STRING")
@@ -3366,7 +3368,8 @@ class AdvancedCustomElementDeleteNode:
     OUTPUT_NODE = True
     CATEGORY = NODE_CATEGORY
 
-    def delete(self, element_id, provider=OFFICIAL_PROVIDER):
+    def delete(self, element_id, provider=None):
+        provider = _resolve_video_provider(provider)
         element_id = str(element_id or "").strip()
         if not element_id:
             raise ValueError("element_id is required.")
@@ -3445,7 +3448,6 @@ class MotionControlNode:
                 "reference_image": ("IMAGE",),
             },
             "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "reference_video": ("STRING", {"multiline": False, "default": ""}),
                 "reference_video_input": ("VIDEO",),
                 "reference_video_frames": ("IMAGE",),
@@ -3471,7 +3473,7 @@ class MotionControlNode:
             self,
             model_name,
             reference_image,
-            provider=OFFICIAL_PROVIDER,
+            provider=None,
             reference_video="",
             prompt="",
             negative_prompt="",
@@ -3485,6 +3487,7 @@ class MotionControlNode:
             reference_video_frames=None,
             reference_video_info=None,
     ):
+        provider = _resolve_video_provider(provider)
         model_name = (model_name or "kling-v2-6").strip() or "kling-v2-6"
         reference_video = _resolve_motion_control_reference_video(
             reference_video,
@@ -3607,7 +3610,6 @@ class CustomVoiceCreateNode:
                 "voice_name": ("STRING", {"multiline": False, "default": "Custom Voice"}),
             },
             "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
                 "audio": ("AUDIO",),
                 "voice_file": ("STRING", {"multiline": False, "default": ""}),
                 "voice_url": ("STRING", {"multiline": False, "default": ""}),
@@ -3626,7 +3628,7 @@ class CustomVoiceCreateNode:
     def create(
             self,
             voice_name,
-            provider=OFFICIAL_PROVIDER,
+            provider=None,
             audio=None,
             voice_file="",
             voice_url="",
@@ -3634,6 +3636,7 @@ class CustomVoiceCreateNode:
             external_task_id="",
             callback_url="",
     ):
+        provider = _resolve_video_provider(provider)
         voice_name = str(voice_name or "").strip()
         if not voice_name:
             raise ValueError("voice_name is required.")
@@ -3736,9 +3739,6 @@ class CustomVoiceQueryNode:
             "required": {
                 "task_id_or_external_task_id": ("STRING", {"multiline": False, "default": ""}),
             },
-            "optional": {
-                "provider": (VIDEO_PROVIDER_OPTIONS, {"default": _resolve_video_provider_default()}),
-            },
         }
 
     RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
@@ -3747,7 +3747,8 @@ class CustomVoiceQueryNode:
     OUTPUT_NODE = True
     CATEGORY = NODE_CATEGORY
 
-    def query(self, task_id_or_external_task_id, provider=OFFICIAL_PROVIDER):
+    def query(self, task_id_or_external_task_id, provider=None):
+        provider = _resolve_video_provider(provider)
         identifier = str(task_id_or_external_task_id or "").strip()
         if not identifier:
             raise ValueError("task_id_or_external_task_id is required.")

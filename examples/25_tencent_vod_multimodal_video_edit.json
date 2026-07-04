@@ -87,7 +87,6 @@
       "widgets_values": [
         "kling-v3-omni",
         "Replace the subject's coat with the garment shown in the reference image while preserving motion and camera movement.",
-        "tencent_vod",
         "https://example.com/base-video.mp4",
         "",
         "base",

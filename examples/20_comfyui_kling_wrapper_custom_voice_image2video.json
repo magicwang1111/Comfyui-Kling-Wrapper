@@ -135,7 +135,6 @@
       },
       "widgets_values": [
         "Demo Voice",
-        "official",
         "",
         "",
         "",
@@ -197,7 +196,6 @@
       },
       "widgets_values": [
         "kling-v2-6",
-        "official",
         "The portrait subject <<<voice_1>>> says: \"Welcome to this custom voice demonstration.\"",
         "",
         0.5,

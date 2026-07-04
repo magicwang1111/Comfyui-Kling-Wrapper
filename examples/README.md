@@ -6,7 +6,8 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 
 - Create and fill in `config.local.json` in the repository root before importing the workflows.
 - You can copy `config.example.json` in the repository root as a starting template.
-- For Tencent VOD workflows, set `tencent_secret_id`, `tencent_secret_key`, and `tencent_sub_app_id`, or use the `TENCENTCLOUD_SECRET_ID` and `TENCENTCLOUD_SECRET_KEY` environment variables.
+- The provider is configured globally in `config.local.json` and is intentionally not exposed as a node widget. Use `"provider_default": "official"` for Kling or `"provider_default": "tencent_vod"` for Tencent VOD.
+- For Tencent VOD workflows, set `provider_default` to `tencent_vod` and configure `tencent_secret_id`, `tencent_secret_key`, and `tencent_sub_app_id`, or use the `TENCENTCLOUD_SECRET_ID` and `TENCENTCLOUD_SECRET_KEY` environment variables.
 - Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, `example_scene.png`, `example_lipsync_source.mp4`, `example_lipsync_audio.wav`, and `example_voice_reference.mp3` with files that exist in your ComfyUI input directory.
 - Replace placeholder URLs such as `https://example.com/reference-motion.mp4` with real URLs when needed.
 - Native preset and cloned voices are available for `kling-v2-6`; the active API rejects `voice_list` for `kling-v3`.
