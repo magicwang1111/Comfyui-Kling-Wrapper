@@ -2,11 +2,12 @@ from .api import AdvancedLipSync, Avatar, Client, FaceIdentify, ImageGenerator, 
     Video2Audio, Text2Audio, Text2Video, CameraControl, CameraControlConfig, KolorsVurtualTryOn, VideoExtend, \
     LipSyncInput, EffectInput, Effects, MultiImages2Video, MultiModelVideoEdit, AdvancedCustomElements, \
     MotionControl, CustomVoiceCreate, CustomVoiceQuery, TTS
-from .api.capabilities import DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, DEFAULT_VIDEO_ASPECT_RATIOS, \
-    DEFAULT_VIDEO_DURATIONS, ELEMENT_LIST_TYPE, ELEMENT_TYPE, EXTENDED_IMAGE_ASPECT_RATIOS, IMAGE_GENERATION_MODELS, \
-    IMAGE_TO_VIDEO_MODELS, LIPSYNC_INPUT_TYPE, MULTI_IMAGE_TO_VIDEO_MODELS, NODE_CATEGORY, NODE_PREFIX, SHOT_TYPES, \
-    SOUND_OPTIONS, TEXT_TO_VIDEO_MODELS, VIDEO_GENERATION_MODES, get_image_capability, get_video_capability, \
-    validate_image_generation_request, validate_video_generation_request
+from .api.capabilities import CUSTOM_VOICE_LIST_TYPE, DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, \
+    DEFAULT_VIDEO_ASPECT_RATIOS, DEFAULT_VIDEO_DURATIONS, ELEMENT_LIST_TYPE, ELEMENT_TYPE, \
+    EXTENDED_IMAGE_ASPECT_RATIOS, IMAGE_GENERATION_MODELS, IMAGE_TO_VIDEO_MODELS, LIPSYNC_INPUT_TYPE, \
+    MULTI_IMAGE_TO_VIDEO_MODELS, NODE_CATEGORY, NODE_PREFIX, SHOT_TYPES, SOUND_OPTIONS, TEXT_TO_VIDEO_MODELS, \
+    VIDEO_GENERATION_MODES, get_image_capability, get_video_capability, validate_image_generation_request, \
+    validate_video_generation_request
 from .api.exceptions import KLingAPIError
 from .api.providers import (
     OFFICIAL_PROVIDER,
@@ -614,6 +615,61 @@ def _build_voice_list_from_preset(voice_preset):
     if not voice_id:
         return None
     return [{"voice_id": voice_id}]
+
+
+def _normalize_voice_reference(voice):
+    if voice is None:
+        return None
+    if isinstance(voice, dict):
+        voice_id = str(voice.get("voice_id") or voice.get("id") or "").strip()
+        if not voice_id:
+            raise ValueError("Voice payload is missing voice_id.")
+        return {"voice_id": voice_id}
+    if isinstance(voice, str):
+        voice_id = voice.strip()
+        if not voice_id:
+            return None
+        return {"voice_id": voice_id}
+    raise ValueError("Voice must be a dict or string.")
+
+
+def _normalize_voice_list(voices):
+    if voices is None:
+        return None
+    if isinstance(voices, str):
+        cleaned = voices.strip()
+        if not cleaned:
+            return None
+        if cleaned[0] in "[{":
+            decoded = _parse_json_input(cleaned, "custom_voice_list")
+            voices = decoded
+        else:
+            voices = [line.strip() for line in cleaned.replace(",", "\n").splitlines()]
+    if isinstance(voices, dict):
+        voices = [voices]
+    normalized = []
+    for voice in voices:
+        payload = _normalize_voice_reference(voice)
+        if payload:
+            normalized.append(payload)
+    return normalized or None
+
+
+def _validate_voice_prompt_markers(prompt, voice_list):
+    if not voice_list:
+        return
+    prompt_text = str(prompt or "")
+    missing_markers = [
+        f"<<<voice_{index}>>>"
+        for index in range(1, len(voice_list) + 1)
+        if f"<<<voice_{index}>>>" not in prompt_text
+    ]
+    if missing_markers:
+        raise ValueError(
+            "custom_voice_list requires prompt markers: "
+            + ", ".join(missing_markers)
+            + "."
+        )
 
 
 def _apply_prompt_controls(target, capability, prompt=None, negative_prompt=None, cfg_scale=None):
@@ -1960,6 +2016,7 @@ class Image2VideoNode:
                 "sound": (SOUND_OPTIONS,),
                 "voice_preset": (VOICE_PRESET_OPTIONS, {"default": DEFAULT_VOICE_PRESET}),
                 "custom_voice_id": ("STRING", {"forceInput": True}),
+                "custom_voice_list": (CUSTOM_VOICE_LIST_TYPE,),
                 "shot_type": (SHOT_TYPES,),
                 "image_list": ("IMAGE",),
                 "element_list": (ELEMENT_LIST_TYPE,),
@@ -1992,6 +2049,7 @@ class Image2VideoNode:
                  sound="off",
                  voice_preset=DEFAULT_VOICE_PRESET,
                  custom_voice_id="",
+                 custom_voice_list=None,
                  shot_type="single",
                  image_list=None,
                  element_list=None,
@@ -2001,16 +2059,28 @@ class Image2VideoNode:
         mode = _normalize_requested_mode(model, capability, mode)
         normalized_element_list = _normalize_element_list(element_list)
         preset_voice_list = _build_voice_list_from_preset(voice_preset)
+        normalized_custom_voice_list = _normalize_voice_list(custom_voice_list)
         custom_voice_id = str(custom_voice_id or "").strip()
         if custom_voice_id and preset_voice_list:
             raise ValueError("Use custom_voice_id or voice_preset, not both.")
+        if normalized_custom_voice_list and (custom_voice_id or preset_voice_list):
+            raise ValueError("Use custom_voice_list, custom_voice_id, or voice_preset, not more than one.")
         if custom_voice_id and sound != "on":
             raise ValueError("custom_voice_id requires sound='on'.")
+        if normalized_custom_voice_list and sound != "on":
+            raise ValueError("custom_voice_list requires sound='on'.")
         if custom_voice_id and "<<<voice_1>>>" not in str(prompt or ""):
             raise ValueError("custom_voice_id requires the prompt marker <<<voice_1>>>.")
-        if custom_voice_id and normalized_element_list:
+        _validate_voice_prompt_markers(prompt, normalized_custom_voice_list)
+        if custom_voice_id and normalized_element_list and model != "kling-v3-omni":
             raise ValueError("custom_voice_id cannot be used together with element_list.")
-        parsed_voice_list = [{"voice_id": custom_voice_id}] if custom_voice_id else preset_voice_list
+        if normalized_custom_voice_list and normalized_element_list and model != "kling-v3-omni":
+            raise ValueError("custom_voice_list cannot be used together with element_list.")
+        parsed_voice_list = (
+            normalized_custom_voice_list
+            or ([{"voice_id": custom_voice_id}] if custom_voice_id else None)
+            or preset_voice_list
+        )
         encoded_image_list = _image_batch_to_base64_list(image_list)
         has_reference_video = isinstance(reference_video, str) and bool(reference_video.strip())
         has_camera_control = camera_control_type not in (None, "None")
@@ -3432,6 +3502,48 @@ class ElementListBuilderNode:
         normalized = _normalize_element_list(element_refs)
         if not normalized:
             raise ValueError("At least one element is required.")
+
+        return (
+            normalized,
+            json.dumps(normalized, ensure_ascii=False),
+        )
+
+
+class CustomVoiceListBuilderNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "voice_1": ("STRING", {"forceInput": True}),
+            },
+            "optional": {
+                "voice_2": ("STRING", {"forceInput": True}),
+                "voice_3": ("STRING", {"forceInput": True}),
+                "voice_4": ("STRING", {"forceInput": True}),
+                "extra_voice_ids": ("STRING", {"multiline": True, "default": ""}),
+            }
+        }
+
+    RETURN_TYPES = (CUSTOM_VOICE_LIST_TYPE, "STRING")
+    RETURN_NAMES = ("custom_voice_list", "custom_voice_list_json")
+    FUNCTION = "build"
+    OUTPUT_NODE = False
+    CATEGORY = NODE_CATEGORY
+
+    def build(self, voice_1, voice_2=None, voice_3=None, voice_4=None, extra_voice_ids=""):
+        voice_refs = []
+        for voice_id in (voice_1, voice_2, voice_3, voice_4):
+            if voice_id is not None:
+                voice_refs.append(voice_id)
+
+        for raw_line in (extra_voice_ids or "").replace(",", "\n").splitlines():
+            voice_id = raw_line.strip()
+            if voice_id:
+                voice_refs.append(voice_id)
+
+        normalized = _normalize_voice_list(voice_refs)
+        if not normalized:
+            raise ValueError("At least one voice_id is required.")
 
         return (
             normalized,

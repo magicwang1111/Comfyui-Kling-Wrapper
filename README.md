@@ -14,7 +14,7 @@ It bundles image generation, text-to-video, image-to-video, multi-image video, a
 
 ## Current model visibility
 
-The plugin keeps the visible model dropdowns aligned with models verified on the active endpoint.
+The plugin keeps the visible model dropdowns aligned with models confirmed for the active integration paths.
 
 Visible image generation models:
 
@@ -34,6 +34,7 @@ Visible text-to-video models:
 - `kling-v2-5-turbo`
 - `kling-v2-6`
 - `kling-v3`
+- `kling-v3-omni`
 
 Visible image-to-video models:
 
@@ -46,26 +47,29 @@ Visible image-to-video models:
 - `kling-v2-5-turbo`
 - `kling-v2-6`
 - `kling-v3`
+- `kling-v3-omni`
 
 Visible multi-image video models:
 
 - `kling-v2-1`
 - `kling-v2-5-turbo`
 - `kling-v3`
+- `kling-v3-omni`
 
 Visible video generation modes:
 
 - `std`
 - `pro`
-- `4k` (`kling-v3` text-to-video, image-to-video, and multi-image video only; the API uses `mode: "4k"`)
+- `4k` (`kling-v3` and `kling-v3-omni` text-to-video, image-to-video, and multi-image video; the API uses `mode: "4k"`)
 
-Documented newer models such as `kling-image-o1`, `kling-video-o1`, and `kling-v3-omni` still exist in the internal capability map, but are hidden from the UI until live endpoint support is confirmed for normal accounts.
+Documented newer models such as `kling-image-o1` and `kling-video-o1` still exist in the internal capability map, but are hidden from the UI until live endpoint support is confirmed for normal accounts.
 
 ## Important limitations
 
 - Native 4K video output is exposed through the video `mode` dropdown. Models that do not support `mode=4k` will be rejected by the node capability checks before submission.
 - Native preset and cloned voices are available for `kling-v2-6`; `Image2Video.custom_voice_id` sends cloned voice control through `voice_list`. The active API rejects this field for `kling-v3`.
-- `kling-v3-omni` and `kling-video-o1` remain hidden until live endpoint support is confirmed for normal accounts.
+- `kling-v3-omni` is visible for text-to-video, image-to-video, and multi-image video comparison. It can combine `voice_list`/`custom_voice_id` with `element_list`; reference-video requests remain guarded because native audio and `mode=4k` are rejected when `reference_video` is provided.
+- `kling-video-o1` remains hidden until live endpoint support is confirmed for normal accounts.
 - `Advanced Element Create` requires 1 frontal subject image plus 1-3 additional reference images of the same subject. Background images do not count as reference images.
 - `Advanced Element Create` also enforces `element_name <= 20` characters and `element_description <= 100` characters.
 - If you need both strong subject consistency and voiced output, the reliable flow on the current endpoint is usually: generate the bound subject video first, then add speech with `Lip Sync`, `TextToAudio`, or `Video2Audio`.
@@ -150,6 +154,7 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 - `Comfyui-Kling-Wrapper TTS`
 - `Comfyui-Kling-Wrapper Custom Voice Create`
 - `Comfyui-Kling-Wrapper Custom Voice Query`
+- `Comfyui-Kling-Wrapper Custom Voice List Builder`
 - `Comfyui-Kling-Wrapper Video2Audio`
 - `Comfyui-Kling-Wrapper Advanced Element Create`
 - `Comfyui-Kling-Wrapper Advanced Element Query`
@@ -219,7 +224,7 @@ When `duration` is set to `auto`, the node tries to match the uploaded reference
 
 ## Voice presets
 
-`Text2Video` and `Image2Video` expose a `voice_preset` dropdown. `Image2Video` additionally accepts a connected `custom_voice_id`.
+`Text2Video` and `Image2Video` expose a `voice_preset` dropdown. `Image2Video` additionally accepts a connected `custom_voice_id` for one custom voice, or a connected `custom_voice_list` from `Custom Voice List Builder` for multiple custom voices.
 
 The selected preset is converted to:
 
@@ -228,6 +233,8 @@ The selected preset is converted to:
 ```
 
 These presets are mainly intended for models that support native audio generation on the active endpoint, especially `kling-v2-6`.
+
+For multiple custom voices, connect one or more `Custom Voice Create.voice_id` outputs to `Custom Voice List Builder`, then connect its `custom_voice_list` output to `Image2Video.custom_voice_list`. Set `sound=on` and reference each voice in order with prompt markers such as `<<<voice_1>>>` and `<<<voice_2>>>`. `custom_voice_list`, `custom_voice_id`, and `voice_preset` are mutually exclusive.
 
 For official or manually supplied preset voice IDs, use the dedicated `TTS` node. It calls `/v1/audio/tts` and returns an `audio_url` that can be saved or previewed with `Preview Audio`.
 

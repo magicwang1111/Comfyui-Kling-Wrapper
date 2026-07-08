@@ -5,6 +5,7 @@ CLIENT_TYPE = "COMFYUI_KLING_WRAPPER_API_CLIENT"
 LIPSYNC_INPUT_TYPE = "COMFYUI_KLING_WRAPPER_LIPSYNC_INPUT"
 ELEMENT_TYPE = "COMFYUI_KLING_WRAPPER_ELEMENT"
 ELEMENT_LIST_TYPE = "COMFYUI_KLING_WRAPPER_ELEMENT_LIST"
+CUSTOM_VOICE_LIST_TYPE = "COMFYUI_KLING_WRAPPER_CUSTOM_VOICE_LIST"
 
 DEFAULT_VIDEO_ASPECT_RATIOS = ["16:9", "9:16", "1:1"]
 EXTENDED_IMAGE_ASPECT_RATIOS = ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3", "21:9", "auto"]
@@ -248,8 +249,8 @@ VIDEO_MODEL_CAPABILITIES = {
         "supports_image_list": True,
         "supports_element_list": True,
         "supports_reference_video": True,
-        "supports_sound": False,
-        "supports_voice_list": False,
+        "supports_sound": True,
+        "supports_voice_list": True,
         "supports_negative_prompt": False,
         "supports_cfg_scale": False,
         "shot_types": ["single", "intelligence"],
@@ -258,9 +259,9 @@ VIDEO_MODEL_CAPABILITIES = {
 }
 
 # ComfyUI input options are static, so we keep the visible dropdowns aligned
-# with models verified on the active endpoint. Newer documented models may
-# still exist in VIDEO_MODEL_CAPABILITIES for future use, but remain hidden
-# until live account support is confirmed.
+# with models confirmed for the active integration paths. Some documented
+# models may still exist in VIDEO_MODEL_CAPABILITIES for future use, but remain
+# hidden until endpoint support is confirmed.
 IMAGE_GENERATION_MODELS = [
     "kling-v1",
     "kling-v1-5",
@@ -278,6 +279,7 @@ TEXT_TO_VIDEO_MODELS = [
     "kling-v2-5-turbo",
     "kling-v2-6",
     "kling-v3",
+    "kling-v3-omni",
 ]
 
 IMAGE_TO_VIDEO_MODELS = [
@@ -290,6 +292,7 @@ IMAGE_TO_VIDEO_MODELS = [
     "kling-v2-5-turbo",
     "kling-v2-6",
     "kling-v3",
+    "kling-v3-omni",
 ]
 
 # Multi-image generation is routed through image2video with a primary `image`
@@ -298,6 +301,7 @@ MULTI_IMAGE_TO_VIDEO_MODELS = [
     "kling-v2-1",
     "kling-v2-5-turbo",
     "kling-v3",
+    "kling-v3-omni",
 ]
 
 
