@@ -29,6 +29,7 @@ class V3OmniVisibilityTests(unittest.TestCase):
     def setUpClass(cls):
         _install_import_stubs()
         cls.capabilities = importlib.import_module("py.api.capabilities")
+        cls.client_module = importlib.import_module("py.api.client")
         cls.nodes = importlib.import_module("py.nodes")
         cls.tencent_video = importlib.import_module("py.api.providers.tencent_vod.video")
 
@@ -116,6 +117,14 @@ class V3OmniVisibilityTests(unittest.TestCase):
     def test_custom_voice_list_builder_is_registered(self):
         mappings = importlib.import_module("py").NODE_CLASS_MAPPINGS
         self.assertIn("Comfyui-Kling-Wrapper Custom Voice List Builder", mappings)
+
+    def test_official_client_supports_context_manager(self):
+        client = self.client_module.Client("ak", "sk")
+        with mock.patch.object(client, "close") as close_mock:
+            with client as active_client:
+                self.assertIs(active_client, client)
+
+        close_mock.assert_called_once_with()
 
     def test_v3_omni_custom_voice_list_sends_multiple_voices(self):
         captured_requests = []

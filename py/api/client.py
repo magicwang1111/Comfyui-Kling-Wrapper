@@ -47,6 +47,13 @@ class Client:
 
         self.poll_interval = poll_interval
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
     def request(self, method: str, path: str, **kwargs) -> dict:
         method_upper = str(method or "").upper()
         if "json" in kwargs:
