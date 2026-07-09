@@ -12,6 +12,7 @@ VIDEO_PROVIDER_OPTIONS = [OFFICIAL_PROVIDER, TENCENT_VOD_PROVIDER]
 class OfficialVideoConfig:
     access_key: str
     secret_key: str
+    api_key: str | None = None
     in_china: bool = True
     timeout: int = 30
     poll_interval: float = 1.0

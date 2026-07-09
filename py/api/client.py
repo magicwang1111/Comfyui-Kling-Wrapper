@@ -36,10 +36,11 @@ class Client:
     __token = None
     __client = None
 
-    def __init__(self, access_key, secret_key, in_china=True, timeout=30, poll_interval=1.0, ttl=1800):
+    def __init__(self, access_key, secret_key, in_china=True, timeout=30, poll_interval=1.0, ttl=1800, api_key=None):
         super().__init__()
         self._access_key = access_key
         self._secret_key = secret_key
+        self._api_key = str(api_key or "").strip() or None
         self._timeout = timeout
         self._create_time = None
         self._ttl = ttl
@@ -109,6 +110,8 @@ class Client:
 
     @property
     def _is_expired(self):
+        if self._api_key:
+            return False
         if self._create_time is None:
             return True
         return time.time() - self._create_time > self._ttl
@@ -133,9 +136,10 @@ class Client:
     def _client(self) -> httpx.Client:
         if self.__client is None or self._is_expired:
             base_url = str(self._area.value)
+            bearer_token = self._api_key or self._token
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self._token}"
+                "Authorization": f"Bearer {bearer_token}"
             }
             timeout = httpx.Timeout(connect=10.0, read=self._timeout, write=self._timeout, pool=self._timeout)
             self.__client = httpx.Client(base_url=base_url, headers=headers, timeout=timeout)

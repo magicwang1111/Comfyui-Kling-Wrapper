@@ -10,7 +10,7 @@ CUSTOM_VOICE_LIST_TYPE = "COMFYUI_KLING_WRAPPER_CUSTOM_VOICE_LIST"
 DEFAULT_VIDEO_ASPECT_RATIOS = ["16:9", "9:16", "1:1"]
 EXTENDED_IMAGE_ASPECT_RATIOS = ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3", "21:9", "auto"]
 DEFAULT_IMAGE_RESOLUTIONS = ["1k", "2k"]
-DEFAULT_VIDEO_DURATIONS = ["3", "5", "10", "15"]
+DEFAULT_VIDEO_DURATIONS = [str(value) for value in range(3, 16)]
 DEFAULT_MODES = ["std", "pro"]
 VIDEO_GENERATION_MODES = ["std", "pro", "4k"]
 SHOT_TYPES = ["single", "intelligence"]
@@ -256,6 +256,22 @@ VIDEO_MODEL_CAPABILITIES = {
         "shot_types": ["single", "intelligence"],
         "supports_watermark": True,
     },
+    "kling-v3-turbo": {
+        "tasks": {"text2video", "image2video"},
+        "modes": ["std", "pro", "4k"],
+        "durations": [str(value) for value in range(3, 16)],
+        "supports_camera_control": False,
+        "supports_image_tail": False,
+        "supports_image_list": False,
+        "supports_element_list": False,
+        "supports_reference_video": False,
+        "supports_sound": False,
+        "supports_voice_list": False,
+        "supports_negative_prompt": False,
+        "supports_cfg_scale": False,
+        "shot_types": ["single"],
+        "supports_watermark": True,
+    },
 }
 
 # ComfyUI input options are static, so we keep the visible dropdowns aligned
@@ -280,6 +296,7 @@ TEXT_TO_VIDEO_MODELS = [
     "kling-v2-6",
     "kling-v3",
     "kling-v3-omni",
+    "kling-v3-turbo",
 ]
 
 IMAGE_TO_VIDEO_MODELS = [
@@ -293,6 +310,7 @@ IMAGE_TO_VIDEO_MODELS = [
     "kling-v2-6",
     "kling-v3",
     "kling-v3-omni",
+    "kling-v3-turbo",
 ]
 
 # Multi-image generation is routed through image2video with a primary `image`

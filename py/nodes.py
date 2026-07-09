@@ -291,6 +291,10 @@ def _resolve_secret_key(config_data):
     )
 
 
+def _resolve_api_key(config_data):
+    return _config_or_env_value(config_data, "api_key", ("KLINGAI_API_KEY", "KLING_API_KEY"))
+
+
 def _resolve_area(config_data):
     if _json_value_present(config_data, "area"):
         return _normalize_area(config_data["area"])
@@ -338,12 +342,14 @@ def _resolve_request_timeout(config_data):
 
 def _create_runtime_client():
     config_data = _load_json_config()
+    api_key = _resolve_api_key(config_data)
     client = Client(
-        _resolve_access_key(config_data),
-        _resolve_secret_key(config_data),
+        "" if api_key else _resolve_access_key(config_data),
+        "" if api_key else _resolve_secret_key(config_data),
         in_china=_resolve_area(config_data) == "china",
         timeout=_resolve_request_timeout(config_data),
         poll_interval=_resolve_poll_interval(config_data),
+        api_key=api_key or None,
     )
     return client
 
@@ -423,9 +429,11 @@ def _create_video_provider(provider_name):
     config_data = _load_json_config()
     provider_name = str(provider_name or _resolve_video_provider_default(config_data)).strip().lower()
     if provider_name == OFFICIAL_PROVIDER:
+        api_key = _resolve_api_key(config_data)
         config = OfficialVideoConfig(
-            access_key=_resolve_access_key(config_data),
-            secret_key=_resolve_secret_key(config_data),
+            access_key="" if api_key else _resolve_access_key(config_data),
+            secret_key="" if api_key else _resolve_secret_key(config_data),
+            api_key=api_key or None,
             in_china=_resolve_area(config_data) == "china",
             timeout=_resolve_request_timeout(config_data),
             poll_interval=_resolve_poll_interval(config_data),

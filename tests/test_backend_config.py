@@ -39,6 +39,8 @@ TencentVodVideoProvider = kling_tencent_provider.TencentVodVideoProvider
 
 
 ENV_KEYS = {
+    "KLINGAI_API_KEY": "",
+    "KLING_API_KEY": "",
     "KLINGAI_API_ACCESS_KEY": "",
     "KLING_ACCESS_KEY": "",
     "KLINGAI_API_SECRET_KEY": "",
@@ -167,6 +169,38 @@ class BackendConfigTests(unittest.TestCase):
                 model_name="kling-v2-6",
                 mode="4k",
                 duration="5",
+            )
+
+    def test_kling_v3_turbo_is_visible_with_legacy_mode_names(self):
+        self.assertIn("kling-v3-turbo", kling_capabilities.TEXT_TO_VIDEO_MODELS)
+        self.assertIn("kling-v3-turbo", kling_capabilities.IMAGE_TO_VIDEO_MODELS)
+        capability = kling_capabilities.validate_video_generation_request(
+            task_name="text2video",
+            model_name="kling-v3-turbo",
+            mode="pro",
+            duration="7",
+        )
+
+        self.assertEqual(capability["modes"], ["std", "pro", "4k"])
+        self.assertIn("14", capability["durations"])
+        self.assertFalse(capability["supports_sound"])
+
+    def test_kling_v3_turbo_rejects_old_unsupported_controls(self):
+        with self.assertRaisesRegex(ValueError, "does not support sound control"):
+            kling_capabilities.validate_video_generation_request(
+                task_name="image2video",
+                model_name="kling-v3-turbo",
+                mode="std",
+                duration="5",
+                has_sound=True,
+            )
+        with self.assertRaisesRegex(ValueError, "does not support image_list"):
+            kling_capabilities.validate_video_generation_request(
+                task_name="image2video",
+                model_name="kling-v3-turbo",
+                mode="std",
+                duration="5",
+                has_image_list=True,
             )
 
     def test_omni_reference_video_rejects_4k_mode(self):
@@ -1224,6 +1258,33 @@ class BackendConfigTests(unittest.TestCase):
             timeout=45,
             poll_interval=2.5,
         ))
+
+    def test_official_provider_accepts_api_key_without_aksk(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = Path(tmpdir) / "config.local.json"
+            json_path.write_text(
+                json.dumps(
+                    {
+                        "provider_default": OFFICIAL_PROVIDER,
+                        "api_key": "json-api-key",
+                        "area": "china",
+                        "poll_interval": 2.5,
+                        "request_timeout": 45,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(kling_nodes, "CONFIG_JSON_PATH", json_path):
+                provider = kling_nodes._create_video_provider(OFFICIAL_PROVIDER)
+                client = kling_nodes._create_runtime_client()
+
+        self.assertIsInstance(provider, OfficialVideoProvider)
+        self.assertEqual(provider._config.access_key, "")
+        self.assertEqual(provider._config.secret_key, "")
+        self.assertEqual(provider._config.api_key, "json-api-key")
+        self.assertEqual(client._api_key, "json-api-key")
+        client.close()
 
     def test_create_video_provider_returns_tencent_provider(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2323,6 +2384,105 @@ class BackendConfigTests(unittest.TestCase):
                     )
                 )
         self.assertEqual(seen["image_list"], ["reference-base64"])
+
+    def test_official_turbo_text2video_uses_new_task_api(self):
+        requests_seen = []
+
+        class DummyClient:
+            poll_interval = 0
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def request(self, method, path, **kwargs):
+                requests_seen.append((method, path, kwargs))
+                if method == "POST":
+                    return {"code": 0, "data": {"id": "task-turbo"}}
+                return {
+                    "code": 0,
+                    "data": [
+                        {
+                            "id": "task-turbo",
+                            "status": "succeeded",
+                            "outputs": [
+                                {
+                                    "type": "video",
+                                    "id": "video-turbo",
+                                    "url": "https://example.com/turbo.mp4",
+                                }
+                            ],
+                            "billing": [{"amount": "2.5"}],
+                        }
+                    ],
+                }
+
+        provider = OfficialVideoProvider(
+            OfficialVideoConfig(access_key="", secret_key="", api_key="json-api-key")
+        )
+        with mock.patch.object(provider, "_make_client", return_value=DummyClient()):
+            with mock.patch("py.api.providers.official.turbo.time.sleep"):
+                result = provider.generate_text2video(
+                    kling_providers.Text2VideoRequest(
+                        model_name="kling-v3-turbo",
+                        prompt="demo",
+                        mode="pro",
+                        duration="7",
+                        aspect_ratio="9:16",
+                    )
+                )
+
+        self.assertEqual(result.url, "https://example.com/turbo.mp4")
+        self.assertEqual(result.final_unit_deduction, 2.5)
+        self.assertEqual(requests_seen[0][1], "/text-to-video/kling-3.0-turbo")
+        self.assertEqual(
+            requests_seen[0][2]["json"],
+            {
+                "prompt": "demo",
+                "settings": {"resolution": "1080p", "duration": 7, "aspect_ratio": "9:16"},
+                "options": {"watermark_info": {"enabled": False}},
+            },
+        )
+        self.assertEqual(requests_seen[1][1], "/tasks")
+        self.assertEqual(requests_seen[1][2]["params"], {"task_ids": "task-turbo"})
+
+    def test_official_turbo_image2video_maps_4k_mode_to_1080p(self):
+        turbo = importlib.import_module("py.api.providers.official.turbo")
+        payload = turbo.build_image2video_payload(
+            kling_providers.Image2VideoRequest(
+                model_name="kling-v3-turbo",
+                prompt="animate this",
+                image_base64="base64-image",
+                mode="4k",
+                duration="15",
+            )
+        )
+
+        self.assertEqual(payload["settings"], {"resolution": "1080p", "duration": 15})
+        self.assertEqual(
+            payload["contents"],
+            [
+                {"type": "prompt", "text": "animate this"},
+                {"type": "first_frame", "url": "base64-image"},
+            ],
+        )
+
+    def test_official_turbo_rejects_separate_negative_prompt(self):
+        provider = OfficialVideoProvider(
+            OfficialVideoConfig(access_key="", secret_key="", api_key="json-api-key")
+        )
+        with self.assertRaisesRegex(ValueError, "negative_prompt"):
+            provider.generate_text2video(
+                kling_providers.Text2VideoRequest(
+                    model_name="kling-v3-turbo",
+                    prompt="demo",
+                    negative_prompt="no blur",
+                    mode="std",
+                    duration="5",
+                )
+            )
 
 
 if __name__ == "__main__":

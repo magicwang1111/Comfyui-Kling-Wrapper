@@ -126,6 +126,14 @@ class V3OmniVisibilityTests(unittest.TestCase):
 
         close_mock.assert_called_once_with()
 
+    def test_official_client_uses_static_bearer_api_key(self):
+        client = self.client_module.Client("ak", "sk", api_key="bearer-token")
+        try:
+            self.assertFalse(client._is_expired)
+            self.assertEqual(client._client.headers["Authorization"], "Bearer bearer-token")
+        finally:
+            client.close()
+
     def test_v3_omni_custom_voice_list_sends_multiple_voices(self):
         captured_requests = []
 

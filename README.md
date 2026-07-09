@@ -114,6 +114,7 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 
    ```json
    {
+     "api_key": "",
      "access_key": "",
      "secret_key": "",
      "poll_interval": 1.0,
@@ -130,6 +131,8 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 
    Notes:
 
+   - `api_key` is the newer Kling official static Bearer token. When it is set, the official client uses `Authorization: Bearer <api_key>` and does not require `access_key`/`secret_key` JWT signing.
+   - `access_key` and `secret_key` remain supported for the older AK/SK signing flow.
    - `config.local.json` is ignored by git and should hold your real private keys.
    - `config.example.json` is only a template and is never read as live config.
    - Legacy [config.ini](./config.ini) is still accepted as a fallback for `KLINGAI_API_ACCESS_KEY` and `KLINGAI_API_SECRET_KEY`.
@@ -238,6 +241,18 @@ For multiple custom voices, connect one or more `Custom Voice Create.voice_id` o
 
 For official or manually supplied preset voice IDs, use the dedicated `TTS` node. It calls `/v1/audio/tts` and returns an `audio_url` that can be saved or previewed with `Preview Audio`.
 
+## Kling v3 Turbo notes
+
+`kling-v3-turbo` is available in the `Text2Video` and `Image2Video` model dropdowns for the official Kling provider. It uses the newer `/text-to-video/kling-3.0-turbo`, `/image-to-video/kling-3.0-turbo`, and `/tasks` API shape with static Bearer-token auth.
+
+The node keeps the existing front-end `mode` values for workflow compatibility:
+
+- `std` sends `settings.resolution=720p`
+- `pro` sends `settings.resolution=1080p`
+- `4k` is accepted but also sends `settings.resolution=1080p`, because the v3 Turbo API currently documents only `720p` and `1080p`
+
+Use `duration` values from `3` through `15`. For multi-shot v3 Turbo prompts, write the shot structure directly in the prompt text; the older `shot_type=intelligence`, separate `negative_prompt`, `cfg_scale`, `camera_control`, `sound`, `voice_list`, `image_list`, `element_list`, and `reference_video` controls are not sent for this model.
+
 ## Examples
 
 Example workflows and small Python snippets live in [examples/README.md](./examples/README.md).
@@ -252,6 +267,7 @@ The workflow JSON files no longer depend on a front-end `Client` node. Prepare `
 - [Kling advanced lip-sync API documentation](https://klingai.com/document-api/api/video/lip-sync)
 - [Kling Avatar API documentation](https://klingai.com/document-api/api/video/avatar)
 - [Kling 3.0 custom voice documentation](https://klingai.com/document-api/api/video/3-0-omni/voice-customization)
+- [Kling 3.0 Turbo text-to-video documentation](https://klingai.com/document-api/api/video/3-0-turbo/text-to-video)
 - [Kling 3.0 series capability map](https://docs.qingque.cn/d/home/eZQCedMeoI1MTquS1SFRihz4S?identityId=1oEFzU43FYK)
 - [Kling V2.6 API documentation](https://docs.qingque.cn/d/home/eZQB6Bbl5WgW8eIVN--duPVl1?identityId=1oEFzU43FYK)
 - [Kling pricing](https://klingai.com/api/pricing)

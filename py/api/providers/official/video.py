@@ -3,6 +3,7 @@ from __future__ import annotations
 from ... import Client, Image2Video, Text2Video
 from ...exceptions import KLingAPIError
 from ..base import Image2VideoRequest, OfficialVideoConfig, Text2VideoRequest, VideoGenerationResult
+from .turbo import generate_turbo_image2video, generate_turbo_text2video
 
 
 class OfficialVideoProvider:
@@ -16,6 +17,7 @@ class OfficialVideoProvider:
             in_china=self._config.in_china,
             timeout=self._config.timeout,
             poll_interval=self._config.poll_interval,
+            api_key=self._config.api_key,
         )
 
     @staticmethod
@@ -58,6 +60,10 @@ class OfficialVideoProvider:
         )
 
     def generate_image2video(self, request: Image2VideoRequest) -> VideoGenerationResult:
+        if request.model_name == "kling-v3-turbo":
+            with self._make_client() as client:
+                return generate_turbo_image2video(client, request)
+
         generator = Image2Video()
         generator.model_name = request.model_name
         if request.prompt is not None:
@@ -97,6 +103,10 @@ class OfficialVideoProvider:
         return self._extract_result(response, "Official image2video")
 
     def generate_text2video(self, request: Text2VideoRequest) -> VideoGenerationResult:
+        if request.model_name == "kling-v3-turbo":
+            with self._make_client() as client:
+                return generate_turbo_text2video(client, request)
+
         generator = Text2Video()
         generator.model_name = request.model_name
         generator.prompt = request.prompt

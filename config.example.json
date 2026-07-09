@@ -1,5 +1,6 @@
 {
   "provider_default": "official",
+  "api_key": "",
   "access_key": "demo-official-access-key",
   "secret_key": "demo-official-secret-key",
   "poll_interval": 1.0,
