@@ -114,6 +114,7 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 
    ```json
    {
+     "provider_default": "official",
      "api_key": "",
      "access_key": "",
      "secret_key": "",
@@ -125,13 +126,22 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
      "oss_access_key_secret": "",
      "oss_bucket": "",
      "oss_prefix": "kling_uploads",
-     "oss_signed_url_expires": 86400
+     "oss_signed_url_expires": 86400,
+     "vapeur_api_key": "",
+     "vapeur_base_url": "https://api.vapeur.ai",
+     "vapeur_poll_interval": 5.0,
+     "vapeur_request_timeout": 120,
+     "vapeur_max_wait_seconds": 3600
    }
    ```
 
    Notes:
 
    - `api_key` is the newer Kling official static Bearer token. When it is set, the official client uses `Authorization: Bearer <api_key>` and does not require `access_key`/`secret_key` JWT signing.
+   - `provider_default` accepts `official`, `tencent_vod`, or `vapeur`. Provider selection remains backend-only and is not stored in ComfyUI workflows.
+   - Vapeur uses only `vapeur_api_key` (or `VAPEUR_API_KEY`) and never falls back to official or Tencent credentials. Its default base URL is `https://api.vapeur.ai`.
+   - Vapeur model IDs are isolated from official Kling model IDs. The verified catalog currently maps `kling-v2-6` to `kling-v2-6-cn` and `kling-v3` to `kling-v3-cn`; other models fail locally instead of submitting an unauthorized task.
+   - Vapeur supports Text2Video, Image2Video, Multi Images To Video, Motion Control, Video Extender, Custom Voice Create/Query, and Advanced Element Create/Query. Nodes absent from the supplied Vapeur API, plus MultiModal Video Edit (`kling-v3-omni` is unavailable), image generation, image expansion, virtual try-on, lip sync, avatar, effects, audio generation, TTS, and element deletion, fail explicitly instead of falling back to another provider.
    - `access_key` and `secret_key` remain supported for the older AK/SK signing flow.
    - `config.local.json` is ignored by git and should hold your real private keys.
    - `config.example.json` is only a template and is never read as live config.

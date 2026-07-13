@@ -1,6 +1,7 @@
 from .base import (
     OFFICIAL_PROVIDER,
     TENCENT_VOD_PROVIDER,
+    VAPEUR_PROVIDER,
     VIDEO_PROVIDER_OPTIONS,
     AdvancedElementCreateRequest,
     CustomVoiceCreateRequest,
@@ -11,16 +12,19 @@ from .base import (
     MultiModalVideoEditRequest,
     OfficialVideoConfig,
     TencentVodVideoConfig,
+    VapeurVideoConfig,
     Text2VideoRequest,
     VideoGenerationResult,
     VoiceResult,
 )
 from .official import OfficialVideoProvider
 from .tencent_vod import TencentVodVideoProvider
+from .vapeur import VapeurVideoProvider
 
 __all__ = [
     "OFFICIAL_PROVIDER",
     "TENCENT_VOD_PROVIDER",
+    "VAPEUR_PROVIDER",
     "VIDEO_PROVIDER_OPTIONS",
     "AdvancedElementCreateRequest",
     "CustomVoiceCreateRequest",
@@ -31,9 +35,11 @@ __all__ = [
     "MultiModalVideoEditRequest",
     "OfficialVideoConfig",
     "TencentVodVideoConfig",
+    "VapeurVideoConfig",
     "Text2VideoRequest",
     "VideoGenerationResult",
     "VoiceResult",
     "OfficialVideoProvider",
     "TencentVodVideoProvider",
+    "VapeurVideoProvider",
 ]

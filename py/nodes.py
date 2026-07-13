@@ -12,6 +12,7 @@ from .api.exceptions import KLingAPIError
 from .api.providers import (
     OFFICIAL_PROVIDER,
     TENCENT_VOD_PROVIDER,
+    VAPEUR_PROVIDER,
     VIDEO_PROVIDER_OPTIONS,
     AdvancedElementCreateRequest,
     CustomVoiceCreateRequest,
@@ -23,6 +24,8 @@ from .api.providers import (
     OfficialVideoProvider,
     TencentVodVideoConfig,
     TencentVodVideoProvider,
+    VapeurVideoConfig,
+    VapeurVideoProvider,
     Text2VideoRequest,
 )
 import base64
@@ -425,6 +428,38 @@ def _resolve_tencent_max_wait_seconds(config_data):
     return value
 
 
+def _resolve_vapeur_api_key(config_data):
+    return _config_or_env_value(config_data, "vapeur_api_key", "VAPEUR_API_KEY")
+
+
+def _resolve_vapeur_base_url(config_data):
+    value = _config_or_env_value(config_data, "vapeur_base_url", "VAPEUR_BASE_URL", "https://api.vapeur.ai")
+    return str(value).strip().rstrip("/")
+
+
+def _resolve_vapeur_request_timeout(config_data):
+    return _parse_request_timeout(_config_or_env_value(
+        config_data, "vapeur_request_timeout", "VAPEUR_REQUEST_TIMEOUT", DEFAULT_REQUEST_TIMEOUT
+    ))
+
+
+def _resolve_vapeur_poll_interval(config_data):
+    return _parse_poll_interval(_config_or_env_value(
+        config_data, "vapeur_poll_interval", "VAPEUR_POLL_INTERVAL", 5.0
+    ))
+
+
+def _resolve_vapeur_max_wait_seconds(config_data):
+    raw_value = _config_or_env_value(config_data, "vapeur_max_wait_seconds", "VAPEUR_MAX_WAIT_SECONDS", 3600)
+    try:
+        value = int(str(raw_value).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError("vapeur_max_wait_seconds must be an integer.") from exc
+    if value < 30:
+        raise ValueError("vapeur_max_wait_seconds must be greater than or equal to 30.")
+    return value
+
+
 def _create_video_provider(provider_name):
     config_data = _load_json_config()
     provider_name = str(provider_name or _resolve_video_provider_default(config_data)).strip().lower()
@@ -457,6 +492,19 @@ def _create_video_provider(provider_name):
             max_wait_seconds=_resolve_tencent_max_wait_seconds(config_data),
         )
         return TencentVodVideoProvider(config)
+    if provider_name == VAPEUR_PROVIDER:
+        api_key = _resolve_vapeur_api_key(config_data)
+        if not api_key:
+            raise ValueError(
+                "Vapeur provider requires vapeur_api_key in config.local.json or VAPEUR_API_KEY."
+            )
+        return VapeurVideoProvider(VapeurVideoConfig(
+            api_key=api_key,
+            base_url=_resolve_vapeur_base_url(config_data),
+            request_timeout=_resolve_vapeur_request_timeout(config_data),
+            poll_interval=_resolve_vapeur_poll_interval(config_data),
+            max_wait_seconds=_resolve_vapeur_max_wait_seconds(config_data),
+        ))
     raise ValueError(f"Unsupported provider: {provider_name}")
 
 
@@ -478,6 +526,11 @@ def _video_provider(provider_name):
         close = getattr(provider, "close", None)
         if callable(close):
             close()
+
+
+def _reject_vapeur_unsupported(capability: str) -> None:
+    if _resolve_video_provider() == VAPEUR_PROVIDER:
+        raise ValueError(f"Vapeur provider does not support {capability} because the supplied API does not expose this capability.")
 
 
 def _fetch_image(url, stream=True):
@@ -803,9 +856,9 @@ def _collect_element_types(element_list):
     return [element_type for element_type in element_types if element_type]
 
 
-def _build_tencent_vod_image2video_request(request, image, image_tail, image_list):
+def _build_url_image2video_request(request, image, image_tail, image_list):
     if request.image_base64 is None or image is None:
-        raise ValueError("Tencent VOD image2video currently requires a primary IMAGE input.")
+        raise ValueError("This provider requires a primary IMAGE input uploaded as a URL.")
 
     primary_urls = _upload_image_batch_references(image)
     reference_urls = _upload_image_batch_references(image_list) if image_list is not None else []
@@ -1859,6 +1912,7 @@ class ImageGeneratorNode:
                  resolution=None,
                  image_num=None,
                  aspect_ratio=None):
+        _reject_vapeur_unsupported("image generation")
         has_input_image = image is not None
         capability = validate_image_generation_request(
             model_name=model,
@@ -1962,6 +2016,7 @@ class ImageExpanderNode:
                  left_expansion_ratio=None,
                  right_expansion_ratio=None,
                  ):
+        _reject_vapeur_unsupported("image expansion")
         generator = ImageExpander()
 
         generator.image = _image_to_base64(image)
@@ -2138,8 +2193,8 @@ class Image2VideoNode:
                 camera_control_value,
             ) if has_camera_control else None,
         )
-        if provider == TENCENT_VOD_PROVIDER:
-            request = _build_tencent_vod_image2video_request(
+        if provider in {TENCENT_VOD_PROVIDER, VAPEUR_PROVIDER}:
+            request = _build_url_image2video_request(
                 request,
                 image,
                 image_tail,
@@ -2308,6 +2363,7 @@ class KolorsVirtualTryOnNode:
                  model_name,
                  human_image,
                  cloth_image=None):
+        _reject_vapeur_unsupported("virtual try-on")
         generator = KolorsVurtualTryOn()
         generator.model_name = model_name
         generator.human_image = _image_to_base64(human_image)
@@ -2480,6 +2536,13 @@ class VideoExtendNode:
     RETURN_NAMES = ("url", "video_id")
 
     def run(self, video_id, prompt):
+        provider = _resolve_video_provider()
+        if provider == VAPEUR_PROVIDER:
+            with _video_provider(provider) as backend:
+                result = backend.generate_video_extend(video_id, prompt)
+            return (result.url, result.video_id)
+        if provider == TENCENT_VOD_PROVIDER:
+            raise ValueError("Tencent VOD provider does not support Video Extend through this node.")
         generator = VideoExtend()
         generator.video_id = video_id
         generator.prompt = prompt
@@ -2671,6 +2734,7 @@ class LipSyncNode:
             sound_volume=1.0,
             original_audio_volume=1.0,
     ):
+        _reject_vapeur_unsupported("lip sync")
         video_id, video_url = _resolve_lip_sync_video_reference(
             video_id=video_id,
             video_url=video_url,
@@ -2814,6 +2878,7 @@ class AvatarNode:
             audio_url="",
             prompt="",
     ):
+        _reject_vapeur_unsupported("avatar generation")
         audio_id = str(audio_id or "").strip()
         audio_file = str(audio_file or "").strip()
         audio_url = str(audio_url or "").strip()
@@ -2906,6 +2971,7 @@ class EffectNode:
     RETURN_NAMES = ("url", "video_id")
 
     def run(self, effect_scene, model_name, mode, duration, image0, image1=None):
+        _reject_vapeur_unsupported("video effects")
 
         generator = Effects()
         generator.effect_scene = effect_scene
@@ -2966,6 +3032,7 @@ class Video2AudioNode:
                  bgm_prompt=None,
                  asmr_mode=False,
                  ):
+        _reject_vapeur_unsupported("video-to-audio")
 
         generator = Video2Audio()
         generator.video_id = video_id
@@ -3071,6 +3138,23 @@ class MultiImagesToVideoNode:
             print(f'Tencent VOD output video id: {result.video_id}, url: {result.url}')
             return (result.url, result.video_id)
 
+        if provider == VAPEUR_PROVIDER:
+            image_urls = _upload_image_batch_references(image_list)
+            tail_urls = _upload_image_batch_references(image_tail) if image_tail is not None else []
+            request = MultiImagesToVideoRequest(
+                model_name=model,
+                prompt=_clean_optional_text(prompt) or "",
+                negative_prompt=_clean_optional_text(negative_prompt),
+                mode=mode,
+                duration=duration,
+                aspect_ratio=aspect_ratio,
+                image_urls=image_urls,
+                image_tail_url=tail_urls[0] if tail_urls else None,
+            )
+            with _video_provider(provider) as backend:
+                result = backend.generate_multi_images(request)
+            return (result.url, result.video_id)
+
         generator = MultiImages2Video()
         generator.model_name = model
         generator.image = encoded_image_list[0]
@@ -3152,6 +3236,10 @@ class MultiModalVideoEditNode:
         if extra_payload and not isinstance(extra_payload, dict):
             raise ValueError("extra_payload_json must decode to a JSON object.")
 
+        if provider == VAPEUR_PROVIDER:
+            raise ValueError(
+                "Vapeur provider does not support MultiModal Video Edit because the node requires kling-v3-omni."
+            )
         if provider == TENCENT_VOD_PROVIDER:
             request = MultiModalVideoEditRequest(
                 model_name=model,
@@ -3168,7 +3256,6 @@ class MultiModalVideoEditNode:
             )
             with _video_provider(provider) as backend:
                 result = backend.generate_multimodal_edit(request)
-            print(f'Tencent VOD output video id: {result.video_id}, url: {result.url}')
             return (result.url, result.video_id)
 
         generator = MultiModelVideoEdit()
@@ -3316,7 +3403,7 @@ class AdvancedCustomElementCreateNode:
         generator.element_name = element_name
         generator.element_description = element_description
 
-        if provider == TENCENT_VOD_PROVIDER:
+        if provider in {TENCENT_VOD_PROVIDER, VAPEUR_PROVIDER}:
             request = AdvancedElementCreateRequest(
                 element_name=element_name,
                 element_description=element_description,
@@ -3378,7 +3465,7 @@ class AdvancedCustomElementQueryNode:
         if not identifier:
             raise ValueError("identifier is required.")
 
-        if provider == TENCENT_VOD_PROVIDER:
+        if provider in {TENCENT_VOD_PROVIDER, VAPEUR_PROVIDER}:
             with _video_provider(provider) as backend:
                 result = backend.query_element(query_mode, identifier)
             return (
@@ -3451,6 +3538,8 @@ class AdvancedCustomElementDeleteNode:
         element_id = str(element_id or "").strip()
         if not element_id:
             raise ValueError("element_id is required.")
+        if provider == VAPEUR_PROVIDER:
+            raise ValueError("Vapeur provider does not support subject deletion because the supplied API has no delete endpoint.")
         if provider == TENCENT_VOD_PROVIDER:
             with _video_provider(provider) as backend:
                 request_id = backend.delete_element(element_id)
@@ -3632,7 +3721,7 @@ class MotionControlNode:
             raise ValueError("extra_payload_json must decode to a JSON object.")
 
         image_url = _upload_image_reference(reference_image)
-        if provider == TENCENT_VOD_PROVIDER:
+        if provider in {TENCENT_VOD_PROVIDER, VAPEUR_PROVIDER}:
             request = MotionControlRequest(
                 model_name=model_name,
                 image_url=image_url,
@@ -3648,7 +3737,6 @@ class MotionControlNode:
             )
             with _video_provider(provider) as backend:
                 result = backend.generate_motion_control(request)
-            print(f'Tencent VOD output video id: {result.video_id}, url: {result.url}')
             return (result.url, result.video_id)
 
         generator = MotionControl()
@@ -3705,6 +3793,7 @@ class TextToAudioNode:
                  prompt,
                  duration,
                  ):
+        _reject_vapeur_unsupported("text-to-audio")
         generator = Text2Audio()
 
         generator.prompt = prompt
@@ -3801,8 +3890,8 @@ class CustomVoiceCreateNode:
         if callback_url:
             generator.callback_url = callback_url
 
-        if provider == TENCENT_VOD_PROVIDER:
-            if external_task_id or callback_url:
+        if provider in {TENCENT_VOD_PROVIDER, VAPEUR_PROVIDER}:
+            if provider == TENCENT_VOD_PROVIDER and (external_task_id or callback_url):
                 raise ValueError(
                     "Tencent VOD custom voice does not support external_task_id or callback_url."
                 )
@@ -3872,7 +3961,7 @@ class CustomVoiceQueryNode:
         identifier = str(task_id_or_external_task_id or "").strip()
         if not identifier:
             raise ValueError("task_id_or_external_task_id is required.")
-        if provider == TENCENT_VOD_PROVIDER:
+        if provider in {TENCENT_VOD_PROVIDER, VAPEUR_PROVIDER}:
             with _video_provider(provider) as backend:
                 result = backend.query_custom_voice(identifier)
             voice_payload = result.voice
@@ -3940,6 +4029,7 @@ class TTSNode:
     CATEGORY = NODE_CATEGORY
 
     def generate(self, text, voice_id, voice_language, voice_speed):
+        _reject_vapeur_unsupported("text-to-speech")
         text = str(text or "").strip()
         voice_id = str(voice_id or "").strip()
         if not text:

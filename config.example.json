@@ -18,5 +18,10 @@
   "tencent_sub_app_id": 1234567890,
   "tencent_poll_interval": 5.0,
   "tencent_request_timeout": 120,
-  "tencent_max_wait_seconds": 3600
+  "tencent_max_wait_seconds": 3600,
+  "vapeur_api_key": "demo-vapeur-api-key",
+  "vapeur_base_url": "https://api.vapeur.ai",
+  "vapeur_poll_interval": 5.0,
+  "vapeur_request_timeout": 120,
+  "vapeur_max_wait_seconds": 3600
 }

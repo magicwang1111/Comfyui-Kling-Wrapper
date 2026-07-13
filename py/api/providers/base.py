@@ -5,7 +5,8 @@ from typing import Any
 
 OFFICIAL_PROVIDER = "official"
 TENCENT_VOD_PROVIDER = "tencent_vod"
-VIDEO_PROVIDER_OPTIONS = [OFFICIAL_PROVIDER, TENCENT_VOD_PROVIDER]
+VAPEUR_PROVIDER = "vapeur"
+VIDEO_PROVIDER_OPTIONS = [OFFICIAL_PROVIDER, TENCENT_VOD_PROVIDER, VAPEUR_PROVIDER]
 
 
 @dataclass
@@ -35,6 +36,15 @@ class TencentVodVideoConfig:
     person_generation: str = "AllowAdult"
     input_compliance_check: str = "Enabled"
     output_compliance_check: str = "Enabled"
+
+
+@dataclass
+class VapeurVideoConfig:
+    api_key: str
+    base_url: str = "https://api.vapeur.ai"
+    request_timeout: int = 120
+    poll_interval: float = 5.0
+    max_wait_seconds: int = 3600
 
 
 @dataclass
