@@ -81,6 +81,32 @@ class VapeurProviderTests(unittest.TestCase):
                 model_name="kling-v3", image_base64="abc"
             ))
 
+    def test_image_video_uses_oss_urls_after_node_upload(self):
+        submitted = []
+
+        def handler(request):
+            if request.url.path.endswith("/submit"):
+                submitted.append(json.loads(request.content))
+                return httpx.Response(200, json={"Response": {"JobId": "job-url"}})
+            return httpx.Response(200, json={"Response": {
+                "Status": "DONE", "ResultVideoUrl": "https://example.com/result.mp4", "VideoId": "video-url"
+            }})
+
+        provider = self.make_provider(handler)
+        provider.generate_image2video(providers.Image2VideoRequest(
+            model_name="kling-v3",
+            prompt="move",
+            image_base64=None,
+            image_urls=["https://oss.example/front.png", "https://oss.example/reference.png"],
+            image_tail_url="https://oss.example/tail.png",
+        ))
+
+        self.assertEqual(submitted[0]["Image"], {"Url": "https://oss.example/front.png"})
+        self.assertEqual(submitted[0]["ImageList"], [
+            {"Image": {"Url": "https://oss.example/reference.png"}}
+        ])
+        self.assertEqual(submitted[0]["ImageTail"], {"Url": "https://oss.example/tail.png"})
+
     def test_extended_video_methods_use_documented_paths_and_shapes(self):
         submitted = []
 

@@ -175,10 +175,12 @@ class VapeurVideoProvider:
 
     def generate_image2video(self, request: Image2VideoRequest) -> VideoGenerationResult:
         payload = self._video_base(request)
+        primary_image = request.image_base64 or (request.image_urls[0] if request.image_urls else None)
+        reference_images = request.image_list or (request.image_urls[1:] if request.image_urls else None)
         payload.update(_without_none({
-            "Image": _media(request.image_base64),
+            "Image": _media(primary_image),
             "ImageTail": _media(request.image_tail_base64 or request.image_tail_url),
-            "ImageList": request.image_list,
+            "ImageList": [{"Image": _media(image)} for image in reference_images] if reference_images else None,
             "CfgScale": request.cfg_scale,
             "Sound": request.sound,
             "VoiceList": request.voice_list,
