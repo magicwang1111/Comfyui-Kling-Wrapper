@@ -2,30 +2,14 @@
 import { app, ANIM_PREVIEW_WIDGET } from '../../../scripts/app.js';
 import { createImageHost } from "../../../scripts/ui/imagePreview.js"
 
-const BASE_SIZE = 768;
+const MIN_PREVIEW_HEIGHT = 128;
+const NODE_VERTICAL_PADDING = 52;
 
-function setVideoDimensions(videoElement, width, height) {
-    videoElement.style.width = `${width}px`;
-    videoElement.style.height = `${height}px`;
-}
-
-// Resize video maintaining aspect ratio
-export function resizeVideoAspectRatio(videoElement, maxWidth, maxHeight) {
-    const aspectRatio = videoElement.videoWidth / videoElement.videoHeight;
-    let newWidth, newHeight;
-
-    // Check which dimension is the limiting factor
-    if (videoElement.videoWidth / maxWidth > videoElement.videoHeight / maxHeight) {
-        // Width is the limiting factor
-        newWidth = maxWidth;
-        newHeight = newWidth / aspectRatio;
-    } else {
-        // Height is the limiting factor
-        newHeight = maxHeight;
-        newWidth = newHeight * aspectRatio;
-    }
-
-    setVideoDimensions(videoElement, newWidth, newHeight);
+function makeVideoResponsive(videoElement) {
+    videoElement.style.width = '100%';
+    videoElement.style.height = '100%';
+    videoElement.style.objectFit = 'contain';
+    videoElement.style.display = 'block';
 }
 
 export function chainCallback(object, property, callback) {
@@ -54,7 +38,7 @@ export function addVideoPreview(nodeType, options = {}) {
                 videoEl.controls = false;
                 videoEl.loop = true;
                 videoEl.muted = true;
-                resizeVideoAspectRatio(videoEl, BASE_SIZE, BASE_SIZE);
+                makeVideoResponsive(videoEl);
                 cb(videoEl);
             });
             videoEl.addEventListener('error', () => {
@@ -99,24 +83,32 @@ export function addVideoPreview(nodeType, options = {}) {
                 this.animatedImages = true;
                 const widgetIdx = this.widgets?.findIndex((w) => w.name === ANIM_PREVIEW_WIDGET);
 
-                // Set node size to 1024x1024
-                this.size[0] = BASE_SIZE;
-                this.size[1] = BASE_SIZE;
-
                 if (widgetIdx > -1) {
                     // Replace content
                     const widget = this.widgets[widgetIdx];
                     widget.options.host.updateImages(this.imgs);
                 } else {
                     const host = createImageHost(this);
+                    Object.assign(host.el.style, {
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                    });
                     const widget = this.addDOMWidget(ANIM_PREVIEW_WIDGET, 'img', host.el, {
                         host,
-                        getHeight: host.getHeight,
+                        getMinHeight: () => MIN_PREVIEW_HEIGHT,
+                        getMaxHeight: () => Math.max(
+                            MIN_PREVIEW_HEIGHT,
+                            this.size[1] - NODE_VERTICAL_PADDING,
+                        ),
                         onDraw: host.onDraw,
                         hideOnZoom: false,
                     });
                     widget.serializeValue = () => ({
-                        height: BASE_SIZE,
+                        height: this.size[1],
                     });
 
                     widget.options.host.updateImages(this.imgs);

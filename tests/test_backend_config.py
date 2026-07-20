@@ -1472,6 +1472,10 @@ class BackendConfigTests(unittest.TestCase):
         self.assertIs(captured["client"], sentinel_client)
 
     def test_preview_video_returns_local_video_url_when_saved(self):
+        self.assertEqual(
+            kling_nodes.DEFAULT_VIDEO_FILENAME_PREFIX,
+            "video/Kling_%year%%month%%day%_%hour%%minute%%second%",
+        )
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
 
@@ -1479,7 +1483,7 @@ class BackendConfigTests(unittest.TestCase):
                 with mock.patch.object(
                     kling_nodes.folder_paths,
                     "get_save_image_path",
-                    return_value=(str(tmpdir_path), "timeline", 1, "video", None),
+                    return_value=(str(tmpdir_path), "Kling_20260718_180410", 1, "video", None),
                 ) as save_path_mock:
                     with mock.patch.object(kling_nodes, "_fetch_image", return_value=b"video-bytes"):
                         with mock.patch.object(kling_nodes, "_register_output_asset"):
@@ -1490,11 +1494,11 @@ class BackendConfigTests(unittest.TestCase):
         save_path_mock.assert_called_once_with(kling_nodes.DEFAULT_VIDEO_FILENAME_PREFIX, str(tmpdir_path))
         self.assertEqual(
             result["ui"]["video_url"],
-            ["/api/view?type=output&filename=timeline_00001_.mp4&subfolder=video"],
+            ["/api/view?type=output&filename=Kling_20260718_180410_00001_.mp4&subfolder=video"],
         )
         self.assertEqual(
             result["ui"]["images"][0]["filename"],
-            "timeline_00001_.mp4",
+            "Kling_20260718_180410_00001_.mp4",
         )
         self.assertEqual(result["ui"]["images"][0]["subfolder"], "video")
 
