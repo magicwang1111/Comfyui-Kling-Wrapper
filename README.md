@@ -255,6 +255,8 @@ For official or manually supplied preset voice IDs, use the dedicated `TTS` node
 
 `kling-v3-turbo` is available in the `Text2Video` and `Image2Video` model dropdowns for the official Kling provider. It uses the newer `/text-to-video/kling-3.0-turbo`, `/image-to-video/kling-3.0-turbo`, and `/tasks` API shape with static Bearer-token auth.
 
+With `provider_default` set to `tencent_vod`, the same model maps to Tencent VOD `ModelVersion: "3.0-turbo"`. The Tencent path supports text-to-video and single-first-frame image-to-video, and rejects subject references for this model.
+
 The node keeps the existing front-end `mode` values for workflow compatibility:
 
 - `std` sends `settings.resolution=720p`

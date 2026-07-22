@@ -42,6 +42,7 @@ _MODEL_VERSION_MAP = {
     "kling-v2-6": "2.6",
     "kling-v3": "3.0",
     "kling-v3-omni": "3.0-Omni",
+    "kling-v3-turbo": "3.0-turbo",
     "kling-video-o1": "O1",
 }
 
@@ -191,6 +192,11 @@ class TencentVodVideoProvider:
             raise ValueError(f"Unsupported Tencent VOD generation mode: {requested_mode}") from exc
 
     @staticmethod
+    def _validate_subject_references(model_name: str, element_list: list | None) -> None:
+        if model_name == "kling-v3-turbo" and element_list:
+            raise ValueError("Tencent VOD Kling 3.0 Turbo does not support subject references.")
+
+    @staticmethod
     def _session_id(prefix: str) -> str:
         return f"{prefix}-{uuid.uuid4().hex[:24]}"
 
@@ -205,6 +211,7 @@ class TencentVodVideoProvider:
         return result
 
     def generate_image2video(self, request: Image2VideoRequest) -> VideoGenerationResult:
+        self._validate_subject_references(request.model_name, request.element_list)
         payload = build_image2video_payload(
             self._config,
             request,
@@ -215,6 +222,7 @@ class TencentVodVideoProvider:
         return self._submit_video(payload, "image2video")
 
     def generate_text2video(self, request: Text2VideoRequest) -> VideoGenerationResult:
+        self._validate_subject_references(request.model_name, request.element_list)
         payload = build_text2video_payload(
             self._config,
             request,

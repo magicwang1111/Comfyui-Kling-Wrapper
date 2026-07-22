@@ -1,0 +1,270 @@
+{
+  "generated_at": "2026-07-18T11:16:24+0800",
+  "main_image": "D:\\Comfyui-workflow\\20260717可灵腾讯云文档\\1 (25).png",
+  "element_id": "316314471272233",
+  "models": [
+    "kling-v3",
+    "kling-v3-omni"
+  ],
+  "mode": "pro",
+  "duration": "15",
+  "concurrency": 10,
+  "requests_per_model": 10,
+  "total_requests": 20,
+  "success": 20,
+  "failure": 0,
+  "success_rate": 1.0,
+  "overall_elapsed_s": 1578.6119,
+  "mean_generation_s": 521.1966,
+  "p50_generation_s": 496.6539,
+  "p95_generation_s": 714.9961,
+  "oss_input_retained": false,
+  "prompt": "仅使用输入图片作为唯一主画面参考，生成一段15秒、9:16竖屏的高级电商大秀走秀视频。\n\n全片为多机位硬切分镜，不要一镜到底，不要单一长镜头，必须有明显的镜头切换节奏，至少出现7个不同机位镜头，切换干净利落，具有真实时装秀拍摄感。\n\n全程保持同一人物、同一张脸、同一套服装、同一个空间场景、同一背景、同一光线。人物在原场景中自然向前走秀，步态稳定优雅，动作连贯自然，表情自然，眼神稳定。服装面料真实，衣摆、裤脚和配饰随着走路自然摆动，符合真实布料动态。\n\n所有镜头属于同一次连续走秀，严格按照以下分镜执行：\n镜头1，0至2秒：正面全身后退跟拍，人物居中，稳定向前走秀。\n镜头2，2至4秒：高位俯拍，展示人物整体造型与走秀动线。\n镜头3，4至6秒：右前45度中景，摇臂轻微下降，突出人物上半身与服装动态。\n镜头4，6至8秒：低机位脚步镜头，突出鞋子落地、步伐节奏、服装下摆摆动。\n镜头5，8至10秒：侧面全身跟拍，展示身体线条和服装轮廓。\n镜头6，10至12秒：左前45度半身跟拍，突出面部状态和服装材质细节。\n镜头7，12至15秒：正面中景收尾，人物继续向前，镜头稳定收住，形成干净利落的结尾画面。\n\n真实摄影机质感，高级电商大秀氛围，画面干净，构图高级，镜头语言专业。",
+  "negative_prompt": "文字，logo，水印，换脸，滑步，跳帧，闪烁，背景漂移，身体畸形，服装变化，服装颜色变化，服装版型变化，鞋子变化，配饰变化，场景变化，背景变化，光线突变",
+  "model_summaries": [
+    {
+      "model": "kling-v3",
+      "requests": 10,
+      "success": 10,
+      "failure": 0,
+      "success_rate": 1.0,
+      "stage_elapsed_s": 973.0049,
+      "mean_generation_s": 557.2921,
+      "p50_generation_s": 491.562,
+      "p95_generation_s": 850.786
+    },
+    {
+      "model": "kling-v3-omni",
+      "requests": 10,
+      "success": 10,
+      "failure": 0,
+      "success_rate": 1.0,
+      "stage_elapsed_s": 603.6557,
+      "mean_generation_s": 485.1011,
+      "p50_generation_s": 496.6539,
+      "p95_generation_s": 589.0524
+    }
+  ],
+  "results": [
+    {
+      "index": 1,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-cc9771d590235f31316197ab3304e895t",
+      "request_id": "c8b54d85-5ce6-4337-a829-90c3cfa58dc4",
+      "video_id": "1444407842-AigcVideoTask-cc9771d590235f31316197ab3304e895t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/4977dd555001834812303041687/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 701.4171,
+      "error": null
+    },
+    {
+      "index": 2,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-993e8c50247e4608738c6827162d5b7dt",
+      "request_id": "b236331a-68e1-43b2-be69-f2cd032f8fc9",
+      "video_id": "1444407842-AigcVideoTask-993e8c50247e4608738c6827162d5b7dt",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/6cfaf9835001834812185762755/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 406.2161,
+      "error": null
+    },
+    {
+      "index": 3,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-8def265183c52f18cf47cdaa1bd7d19bt",
+      "request_id": "271eb61d-e130-475b-88f6-2962042d681c",
+      "video_id": "1444407842-AigcVideoTask-8def265183c52f18cf47cdaa1bd7d19bt",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/aae0ea1c5001834812179302917/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 972.997,
+      "error": null
+    },
+    {
+      "index": 4,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-81a4e78395f598297d28d3d0d2a39b52t",
+      "request_id": "defb589b-05fd-4bc9-b40e-86cf32a57aae",
+      "video_id": "1444407842-AigcVideoTask-81a4e78395f598297d28d3d0d2a39b52t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/e4ad59955001834812180405563/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 453.187,
+      "error": null
+    },
+    {
+      "index": 5,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-1298a9b3358cdf21cd6c09b605b75a1et",
+      "request_id": "2390514b-e5ec-49a4-8ad1-998b03427ea4",
+      "video_id": "1444407842-AigcVideoTask-1298a9b3358cdf21cd6c09b605b75a1et",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/a33cd6285001834812189869226/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 437.7021,
+      "error": null
+    },
+    {
+      "index": 6,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-d95653a3aec3b9c8f9859cd918c10a48t",
+      "request_id": "e0b3792e-fa07-4d86-a0d3-6c67f5259cd5",
+      "video_id": "1444407842-AigcVideoTask-d95653a3aec3b9c8f9859cd918c10a48t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/4308fec25001834812164592477/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 529.9371,
+      "error": null
+    },
+    {
+      "index": 7,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-3bde32da9ae9ec20add79d3b44158074t",
+      "request_id": "7815aed3-0459-4e90-9e3d-4005e0d84e6a",
+      "video_id": "1444407842-AigcVideoTask-3bde32da9ae9ec20add79d3b44158074t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/3c3395ac5001834812171022073/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 618.1994,
+      "error": null
+    },
+    {
+      "index": 8,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-2970ebc4904ea0a43f000f15c648a615t",
+      "request_id": "9742193f-55a4-43a2-a065-44865a91d16c",
+      "video_id": "1444407842-AigcVideoTask-2970ebc4904ea0a43f000f15c648a615t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/f7fb1c7b5001834812163639019/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 396.4685,
+      "error": null
+    },
+    {
+      "index": 9,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-0582380ecca7ceaa0adc01f7436f0f38t",
+      "request_id": "ef55662b-eeab-4a0c-b954-cd77c9c38be8",
+      "video_id": "1444407842-AigcVideoTask-0582380ecca7ceaa0adc01f7436f0f38t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/f89714dd5001834812187114549/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 655.9456,
+      "error": null
+    },
+    {
+      "index": 10,
+      "model": "kling-v3",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-47f8d1ddc8d89dc170e81412caf40cf2t",
+      "request_id": "f3775e85-9457-4a95-b368-cb1d9a058537",
+      "video_id": "1444407842-AigcVideoTask-47f8d1ddc8d89dc170e81412caf40cf2t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/908f25785001834812189061019/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 400.8506,
+      "error": null
+    },
+    {
+      "index": 1,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-34babc2fa000d52a27dafa0311b0a5act",
+      "request_id": "5e6799d7-9484-415d-8ed7-095459e94503",
+      "video_id": "1444407842-AigcVideoTask-34babc2fa000d52a27dafa0311b0a5act",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/a90d27295001834812179277856/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 410.6685,
+      "error": null
+    },
+    {
+      "index": 2,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-329bd645e3eedb6c2a14b7b84affd2d0t",
+      "request_id": "8c4f2bad-599c-4106-b34b-c131d32a42d6",
+      "video_id": "1444407842-AigcVideoTask-329bd645e3eedb6c2a14b7b84affd2d0t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/dabfc7455001834812190870779/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 457.7326,
+      "error": null
+    },
+    {
+      "index": 3,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-ebedbdd79076d48bd5edf7c377dbbefet",
+      "request_id": "599fb9de-9b71-4cef-8ca9-bf85b5fd908c",
+      "video_id": "1444407842-AigcVideoTask-ebedbdd79076d48bd5edf7c377dbbefet",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/9b42b7ac5001834812304265111/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 509.6197,
+      "error": null
+    },
+    {
+      "index": 4,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-019a3f01ed44131fbc989399935087eat",
+      "request_id": "b70097e2-99ff-410f-ada9-ed2b590db800",
+      "video_id": "1444407842-AigcVideoTask-019a3f01ed44131fbc989399935087eat",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/ef81d38f5001834812170062604/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 571.2148,
+      "error": null
+    },
+    {
+      "index": 5,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-72232fb7b4d53bddcbe1256ae2e92cdat",
+      "request_id": "674477ad-ab9b-4aa8-bd67-358fa40a8451",
+      "video_id": "1444407842-AigcVideoTask-72232fb7b4d53bddcbe1256ae2e92cdat",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/908fc7e25001834812189062577/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 374.3272,
+      "error": null
+    },
+    {
+      "index": 6,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-885d495aece58f04d60c6a7244203b6et",
+      "request_id": "93ad8ef4-de34-4dbc-9e09-d97e0e1dd705",
+      "video_id": "1444407842-AigcVideoTask-885d495aece58f04d60c6a7244203b6et",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/611acf2e5001834812185232220/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 489.2789,
+      "error": null
+    },
+    {
+      "index": 7,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-893721dba1e782e743ceef0ad23342a5t",
+      "request_id": "a8b30512-acae-4aa7-bc5c-928131318731",
+      "video_id": "1444407842-AigcVideoTask-893721dba1e782e743ceef0ad23342a5t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/3363d05e5001834812174711389/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 603.6468,
+      "error": null
+    },
+    {
+      "index": 8,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-8d294338fc87026e1739a67b280f1ac5t",
+      "request_id": "6c165f56-12dc-4c15-8140-3592a6f2fe4f",
+      "video_id": "1444407842-AigcVideoTask-8d294338fc87026e1739a67b280f1ac5t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/9b312c135001834812304256154/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 509.4774,
+      "error": null
+    },
+    {
+      "index": 9,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-1d93bc3694c6618d235a385b6d82c478t",
+      "request_id": "432fe515-441d-435b-91a5-32fd259c68cf",
+      "video_id": "1444407842-AigcVideoTask-1d93bc3694c6618d235a385b6d82c478t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/d4ee78345001834812183801352/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 504.0289,
+      "error": null
+    },
+    {
+      "index": 10,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-689862bc4bb8c85485e85464ca883004t",
+      "request_id": "949cffd2-f251-4571-ae55-5685778f7c95",
+      "video_id": "1444407842-AigcVideoTask-689862bc4bb8c85485e85464ca883004t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/2fd21ce05001834812181377079/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 421.0164,
+      "error": null
+    }
+  ]
+}

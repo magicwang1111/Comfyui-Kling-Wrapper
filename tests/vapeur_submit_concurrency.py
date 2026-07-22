@@ -33,6 +33,9 @@ from py.nodes import _upload_file_to_oss  # noqa: E402
 
 
 SUBMIT_PATH = "/v1/kling/image-to-video/submit"
+DESCRIBE_PATH = "/v1/kling/image-to-video/describe"
+SUCCESS_STATUSES = {"DONE", "SUCCESS", "SUCCEED", "SUCCEEDED", "COMPLETED", "FINISH"}
+FAILED_STATUSES = {"FAIL", "FAILED", "ERROR", "ABORTED", "CANCELLED", "CANCELED"}
 DEFAULT_START_IMAGE = Path(r"E:\批量测试输出\20260623羽绒服测试\伯希和4.png")
 DEFAULT_OUTPUT = Path(__file__).with_name("vapeur_submit_concurrency_report.json")
 DEFAULT_PROMPT = "人物自然轻微转身，衣服随风轻摆，镜头稳定，保持人物和服装一致。"
@@ -56,6 +59,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--requests-per-level", type=int, default=0)
     parser.add_argument("--stage-pause", type=float, default=5.0)
     parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument("--poll-interval", type=float, default=5.0)
+    parser.add_argument("--max-wait-seconds", type=int, default=3600)
     parser.add_argument("--success-threshold", type=float, default=1.0)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--dry-run", action="store_true")
@@ -67,6 +72,8 @@ def load_config(args: argparse.Namespace) -> dict[str, Any]:
     args.api_key = args.api_key or data.get("vapeur_api_key") or os.getenv("VAPEUR_API_KEY")
     args.base_url = (args.base_url or data.get("vapeur_base_url") or "https://api.vapeur.ai").rstrip("/")
     args.timeout = int(data.get("vapeur_request_timeout") or args.timeout)
+    args.poll_interval = float(data.get("vapeur_poll_interval") or args.poll_interval)
+    args.max_wait_seconds = int(data.get("vapeur_max_wait_seconds") or args.max_wait_seconds)
     return data
 
 
@@ -98,7 +105,18 @@ def percentile(values: list[float], pct: float) -> float | None:
 
 def submit_once(index: int, args: argparse.Namespace, payload: dict[str, Any]) -> dict[str, Any]:
     started = time.perf_counter()
-    result = {"index": index, "ok": False, "job_id": None, "status_code": None, "error": None}
+    result = {
+        "index": index,
+        "ok": False,
+        "job_id": None,
+        "status_code": None,
+        "error": None,
+        "generation_ok": None,
+        "generation_status": None,
+        "generation_error": None,
+        "generation_elapsed_s": None,
+        "_request_started": started,
+    }
     try:
         response = session().post(
             f"{args.base_url}{SUBMIT_PATH}",
@@ -123,8 +141,57 @@ def submit_once(index: int, args: argparse.Namespace, payload: dict[str, Any]) -
     return result
 
 
+def wait_for_generation(result: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    poll_started = time.perf_counter()
+    while True:
+        try:
+            response = session().post(
+                f"{args.base_url}{DESCRIBE_PATH}",
+                headers={"Authorization": f"Bearer {args.api_key}"},
+                json={"JobId": result["job_id"]},
+                timeout=args.timeout,
+            )
+            response.raise_for_status()
+            body = response.json()
+            detail = body.get("Response", body) if isinstance(body, dict) else None
+            if not isinstance(detail, dict):
+                raise ValueError(f"Invalid describe response: {body!r}")
+
+            status = str(detail.get("Status") or detail.get("TaskStatus") or "").strip().upper()
+            error_code = str(detail.get("ErrorCode") or "").strip()
+            error_message = str(detail.get("ErrorMessage") or detail.get("TaskStatusMsg") or "").strip()
+            result["generation_status"] = status or None
+            if status in FAILED_STATUSES or error_code:
+                result["generation_ok"] = False
+                result["generation_error"] = (
+                    f"status={status or 'UNKNOWN'}, ErrorCode={error_code or '-'}, "
+                    f"ErrorMessage={error_message or '-'}"
+                )
+                break
+            if status in SUCCESS_STATUSES:
+                result["generation_ok"] = True
+                break
+        except (requests.RequestException, ValueError) as exc:
+            result["generation_ok"] = False
+            result["generation_error"] = f"{exc.__class__.__name__}: {exc}"
+            break
+
+        if time.perf_counter() - poll_started > args.max_wait_seconds:
+            result["generation_ok"] = False
+            result["generation_error"] = f"Timed out after {args.max_wait_seconds} seconds"
+            break
+        time.sleep(args.poll_interval)
+
+    result["generation_elapsed_s"] = round(time.perf_counter() - result.pop("_request_started"), 4)
+    return result
+
+
 def summarize(level: int, results: list[dict[str, Any]], elapsed: float) -> dict[str, Any]:
     latencies = [item["elapsed_s"] for item in results]
+    generation_times = [
+        item["generation_elapsed_s"] for item in results
+        if item["generation_ok"] and item["generation_elapsed_s"] is not None
+    ]
     failures = Counter(
         "http_429" if item["status_code"] == 429
         else "http_5xx" if item["status_code"] and item["status_code"] >= 500
@@ -144,6 +211,11 @@ def summarize(level: int, results: list[dict[str, Any]], elapsed: float) -> dict
         "mean_latency_s": round(sum(latencies) / len(latencies), 4) if latencies else None,
         "p50_latency_s": round(percentile(latencies, 50) or 0, 4) if latencies else None,
         "p95_latency_s": round(percentile(latencies, 95) or 0, 4) if latencies else None,
+        "generation_success": len(generation_times),
+        "generation_failure": sum(item["generation_ok"] is False for item in results),
+        "mean_generation_s": round(sum(generation_times) / len(generation_times), 4) if generation_times else None,
+        "p50_generation_s": round(percentile(generation_times, 50) or 0, 4) if generation_times else None,
+        "p95_generation_s": round(percentile(generation_times, 95) or 0, 4) if generation_times else None,
         "failure_kinds": dict(failures),
         "job_ids": [item["job_id"] for item in results if item["ok"]],
         "sample_failures": [item for item in results if not item["ok"]][:5],
@@ -188,13 +260,28 @@ def main() -> int:
         with ThreadPoolExecutor(max_workers=level) as executor:
             futures = [executor.submit(submit_once, index, args, payload) for index in range(1, count + 1)]
             results = [future.result() for future in as_completed(futures)]
+        submit_elapsed = time.perf_counter() - started
+        submitted = [item for item in results if item["ok"]]
+        if submitted:
+            with ThreadPoolExecutor(max_workers=len(submitted)) as executor:
+                futures = [executor.submit(wait_for_generation, item, args) for item in submitted]
+                for future in as_completed(futures):
+                    item = future.result()
+                    print(
+                        f"[level {level} task {item['index']}] job_id={item['job_id']} "
+                        f"status={item['generation_status'] or 'UNKNOWN'} "
+                        f"generation={item['generation_elapsed_s']}s"
+                    )
+        for item in results:
+            item.pop("_request_started", None)
         results.sort(key=lambda item: item["index"])
-        summary = summarize(level, results, time.perf_counter() - started)
+        summary = summarize(level, results, submit_elapsed)
         summaries.append(summary)
         details.append({"level": level, "results": results})
         print(
             f"[level {level}] requests={count} success={summary['success']} failure={summary['failure']} "
-            f"rate={summary['success_rate'] * 100:.1f}% p95={summary['p95_latency_s']}s"
+            f"rate={summary['success_rate'] * 100:.1f}% submit_p95={summary['p95_latency_s']}s "
+            f"generation_p95={summary['p95_generation_s']}s"
         )
         if stage < len(levels) - 1 and args.stage_pause:
             time.sleep(args.stage_pause)

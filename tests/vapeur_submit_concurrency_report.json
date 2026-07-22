@@ -1,0 +1,330 @@
+{
+  "generated_at": "2026-07-18 10:42:40",
+  "base_url": "https://api.vapeur.ai",
+  "image_path": "E:\\批量测试输出\\20260623羽绒服测试\\伯希和4.png",
+  "image_url": "https://goumee-coze.oss-cn-hangzhou.aliyuncs.com/GouMEE-Comfyui-tmp/20260718/9cde356b659641588221c0c1aad7f7af-4.png",
+  "model": "kling-v3-cn",
+  "mode": "pro",
+  "duration": "15",
+  "levels": [
+    10
+  ],
+  "overall_elapsed_s": 438.8491,
+  "recommended_stable_limit": null,
+  "level_summaries": [
+    {
+      "concurrency": 10,
+      "requests": 20,
+      "success": 19,
+      "failure": 1,
+      "success_rate": 0.95,
+      "stage_elapsed_s": 7.6256,
+      "throughput_rps": 2.6228,
+      "mean_latency_s": 2.2449,
+      "p50_latency_s": 2.03,
+      "p95_latency_s": 3.5538,
+      "generation_success": 19,
+      "generation_failure": 0,
+      "mean_generation_s": 352.041,
+      "p50_generation_s": 351.6725,
+      "p95_generation_s": 416.5355,
+      "failure_kinds": {
+        "http_5xx": 1
+      },
+      "job_ids": [
+        "1469884291601072128",
+        "1469884291945005056",
+        "1469884292548935680",
+        "1469884291521380352",
+        "1469884293089845248",
+        "1469884292846780416",
+        "1469884291483582464",
+        "1469884293475926016",
+        "1469884292112728064",
+        "1469884296630026240",
+        "1469884295270883328",
+        "1469884294990053376",
+        "1469884296470642688",
+        "1469884295585644544",
+        "1469884296147492864",
+        "1469884296512552960",
+        "1469884297678569472",
+        "1469884298588577792",
+        "1469884299515707392"
+      ],
+      "sample_failures": [
+        {
+          "index": 9,
+          "ok": false,
+          "job_id": null,
+          "status_code": 502,
+          "error": {
+            "error": {
+              "message": "SubmitImageToVideoJob 调用失败: 后端服务超时。",
+              "type": "server_error",
+              "code": "provider_error"
+            }
+          },
+          "generation_ok": null,
+          "generation_status": null,
+          "generation_error": null,
+          "generation_elapsed_s": null,
+          "elapsed_s": 7.607
+        }
+      ]
+    }
+  ],
+  "details": [
+    {
+      "level": 10,
+      "results": [
+        {
+          "index": 1,
+          "ok": true,
+          "job_id": "1469884291601072128",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 344.1117,
+          "elapsed_s": 2.8744
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "job_id": "1469884291945005056",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 318.0617,
+          "elapsed_s": 2.9573
+        },
+        {
+          "index": 3,
+          "ok": true,
+          "job_id": "1469884292548935680",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 370.6837,
+          "elapsed_s": 3.1122
+        },
+        {
+          "index": 4,
+          "ok": true,
+          "job_id": "1469884291521380352",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 380.753,
+          "elapsed_s": 2.8655
+        },
+        {
+          "index": 5,
+          "ok": true,
+          "job_id": "1469884293089845248",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 318.1628,
+          "elapsed_s": 3.2225
+        },
+        {
+          "index": 6,
+          "ok": true,
+          "job_id": "1469884292846780416",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 412.0263,
+          "elapsed_s": 3.1671
+        },
+        {
+          "index": 7,
+          "ok": true,
+          "job_id": "1469884291483582464",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 323.1668,
+          "elapsed_s": 2.8613
+        },
+        {
+          "index": 8,
+          "ok": true,
+          "job_id": "1469884293475926016",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 286.7735,
+          "elapsed_s": 3.3405
+        },
+        {
+          "index": 9,
+          "ok": false,
+          "job_id": null,
+          "status_code": 502,
+          "error": {
+            "error": {
+              "message": "SubmitImageToVideoJob 调用失败: 后端服务超时。",
+              "type": "server_error",
+              "code": "provider_error"
+            }
+          },
+          "generation_ok": null,
+          "generation_status": null,
+          "generation_error": null,
+          "generation_elapsed_s": null,
+          "elapsed_s": 7.607
+        },
+        {
+          "index": 10,
+          "ok": true,
+          "job_id": "1469884292112728064",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 354.9547,
+          "elapsed_s": 2.9794
+        },
+        {
+          "index": 11,
+          "ok": true,
+          "job_id": "1469884296630026240",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 435.9613,
+          "elapsed_s": 1.1987
+        },
+        {
+          "index": 12,
+          "ok": true,
+          "job_id": "1469884295270883328",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 335.9211,
+          "elapsed_s": 0.8726
+        },
+        {
+          "index": 13,
+          "ok": true,
+          "job_id": "1469884294990053376",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 278.5755,
+          "elapsed_s": 0.8156
+        },
+        {
+          "index": 14,
+          "ok": true,
+          "job_id": "1469884296470642688",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 351.6725,
+          "elapsed_s": 1.0814
+        },
+        {
+          "index": 15,
+          "ok": true,
+          "job_id": "1469884295585644544",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 304.6619,
+          "elapsed_s": 0.8295
+        },
+        {
+          "index": 16,
+          "ok": true,
+          "job_id": "1469884296147492864",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 372.8555,
+          "elapsed_s": 0.8466
+        },
+        {
+          "index": 17,
+          "ok": true,
+          "job_id": "1469884296512552960",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 388.8923,
+          "elapsed_s": 0.873
+        },
+        {
+          "index": 18,
+          "ok": true,
+          "job_id": "1469884297678569472",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 335.8082,
+          "elapsed_s": 1.1215
+        },
+        {
+          "index": 19,
+          "ok": true,
+          "job_id": "1469884298588577792",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 414.3771,
+          "elapsed_s": 1.1948
+        },
+        {
+          "index": 20,
+          "ok": true,
+          "job_id": "1469884299515707392",
+          "status_code": 200,
+          "error": null,
+          "generation_ok": true,
+          "generation_status": "DONE",
+          "generation_error": null,
+          "generation_elapsed_s": 361.3603,
+          "elapsed_s": 1.0772
+        }
+      ]
+    }
+  ]
+}

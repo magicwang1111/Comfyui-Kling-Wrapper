@@ -1,0 +1,148 @@
+{
+  "generated_at": "2026-07-18T11:32:10+0800",
+  "main_image": "D:\\Comfyui-workflow\\20260717可灵腾讯云文档\\1 (25).png",
+  "element_id": "316314471272233",
+  "models": [
+    "kling-v3-omni"
+  ],
+  "mode": "pro",
+  "duration": "15",
+  "concurrency": 10,
+  "requests_per_model": 10,
+  "total_requests": 10,
+  "success": 10,
+  "failure": 0,
+  "success_rate": 1.0,
+  "overall_elapsed_s": 645.0552,
+  "mean_generation_s": 518.5788,
+  "p50_generation_s": 538.0757,
+  "p95_generation_s": 619.7222,
+  "oss_input_retained": false,
+  "prompt": "仅使用输入图片作为唯一主画面参考，生成一段15秒、9:16竖屏的高级电商大秀走秀视频。\n\n全片为多机位硬切分镜，不要一镜到底，不要单一长镜头，必须有明显的镜头切换节奏，至少出现7个不同机位镜头，切换干净利落，具有真实时装秀拍摄感。\n\n全程保持同一人物、同一张脸、同一套服装、同一个空间场景、同一背景、同一光线。人物在原场景中自然向前走秀，步态稳定优雅，动作连贯自然，表情自然，眼神稳定。服装面料真实，衣摆、裤脚和配饰随着走路自然摆动，符合真实布料动态。\n\n所有镜头属于同一次连续走秀，严格按照以下分镜执行：\n镜头1，0至2秒：正面全身后退跟拍，人物居中，稳定向前走秀。\n镜头2，2至4秒：高位俯拍，展示人物整体造型与走秀动线。\n镜头3，4至6秒：右前45度中景，摇臂轻微下降，突出人物上半身与服装动态。\n镜头4，6至8秒：低机位脚步镜头，突出鞋子落地、步伐节奏、服装下摆摆动。\n镜头5，8至10秒：侧面全身跟拍，展示身体线条和服装轮廓。\n镜头6，10至12秒：左前45度半身跟拍，突出面部状态和服装材质细节。\n镜头7，12至15秒：正面中景收尾，人物继续向前，镜头稳定收住，形成干净利落的结尾画面。\n\n真实摄影机质感，高级电商大秀氛围，画面干净，构图高级，镜头语言专业。",
+  "negative_prompt": "文字，logo，水印，换脸，滑步，跳帧，闪烁，背景漂移，身体畸形，服装变化，服装颜色变化，服装版型变化，鞋子变化，配饰变化，场景变化，背景变化，光线突变",
+  "model_summaries": [
+    {
+      "model": "kling-v3-omni",
+      "requests": 10,
+      "success": 10,
+      "failure": 0,
+      "success_rate": 1.0,
+      "stage_elapsed_s": 633.4207,
+      "mean_generation_s": 518.5788,
+      "p50_generation_s": 538.0757,
+      "p95_generation_s": 619.7222
+    }
+  ],
+  "results": [
+    {
+      "index": 1,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-5ddc1a9c999dfc96437ac8400dc82bc7t",
+      "request_id": "5879232c-8af4-46ed-9d6e-7395b7357449",
+      "video_id": "1444407842-AigcVideoTask-5ddc1a9c999dfc96437ac8400dc82bc7t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/093523865001834812187857076/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 374.3526,
+      "error": null
+    },
+    {
+      "index": 2,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-e9ff0e5f193091461147a639724dc7e7t",
+      "request_id": "4807a730-6e9b-4b07-9877-98f2cc2e8f18",
+      "video_id": "1444407842-AigcVideoTask-e9ff0e5f193091461147a639724dc7e7t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/15d0d6025001834812177539670/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 535.2168,
+      "error": null
+    },
+    {
+      "index": 3,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-f17a2f66c00f47fb3233d9ce5e8c3646t",
+      "request_id": "b3133c0d-bbfe-4271-924c-8307968f4736",
+      "video_id": "1444407842-AigcVideoTask-f17a2f66c00f47fb3233d9ce5e8c3646t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/63e1ebcc5001834812192101180/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 582.025,
+      "error": null
+    },
+    {
+      "index": 4,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-d6651761ce43a50a5a1f7916b289fb7bt",
+      "request_id": "5f49d347-7231-4190-8d0d-0ca715400ee6",
+      "video_id": "1444407842-AigcVideoTask-d6651761ce43a50a5a1f7916b289fb7bt",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/093523c45001834812187857092/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 555.8422,
+      "error": null
+    },
+    {
+      "index": 5,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-377611dd9c83b0272ab6cab535a29881t",
+      "request_id": "9d545a01-cd9d-48cc-bd58-e5e2961e98f3",
+      "video_id": "1444407842-AigcVideoTask-377611dd9c83b0272ab6cab535a29881t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/048b84095001834812187658908/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 633.4083,
+      "error": null
+    },
+    {
+      "index": 6,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-33e622b6b4162ff32ccbd553c67f1ff1t",
+      "request_id": "6c9b2293-663d-4312-9561-27a0227e2de6",
+      "video_id": "1444407842-AigcVideoTask-33e622b6b4162ff32ccbd553c67f1ff1t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/56088f085001834812188832768/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 602.9948,
+      "error": null
+    },
+    {
+      "index": 7,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-ec4ecb456fb0c76fc492453f2c58ecb5t",
+      "request_id": "9827ac84-ce1c-4d7f-820a-e4801fc45e62",
+      "video_id": "1444407842-AigcVideoTask-ec4ecb456fb0c76fc492453f2c58ecb5t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/19d072835001834812191286739/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 493.869,
+      "error": null
+    },
+    {
+      "index": 8,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-449b57f204118e97502ac2a7d9afe089t",
+      "request_id": "939c7de9-0c36-4a88-813f-162d8df33443",
+      "video_id": "1444407842-AigcVideoTask-449b57f204118e97502ac2a7d9afe089t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/17590b175001834812309048172/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 540.9347,
+      "error": null
+    },
+    {
+      "index": 9,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-2b45223f35d5d74c4d23ba3270ecd094t",
+      "request_id": "3db2dacd-1854-4f82-b372-674c7a8ae9c8",
+      "video_id": "1444407842-AigcVideoTask-2b45223f35d5d74c4d23ba3270ecd094t",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/dab05ef65001834812190865400/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 482.8142,
+      "error": null
+    },
+    {
+      "index": 10,
+      "model": "kling-v3-omni",
+      "ok": true,
+      "task_id": "1444407842-AigcVideoTask-783675072461798e452c9865e11ca36at",
+      "request_id": "97c4aad2-f25a-41be-a8ae-1f05fce7cb28",
+      "video_id": "1444407842-AigcVideoTask-783675072461798e452c9865e11ca36at",
+      "video_url": "http://251000800.vod2.myqcloud.com/1a168d62vodcq251000800/f895fc3a5001834812187112557/aigcVideoGenFile.mp4",
+      "generation_elapsed_s": 384.3309,
+      "error": null
+    }
+  ]
+}

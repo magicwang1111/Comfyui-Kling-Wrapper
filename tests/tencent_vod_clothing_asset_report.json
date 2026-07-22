@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-07-18T10:49:32+0800",
+  "element_name": "B250246350DY松烁沙",
+  "element_description": "波司登米白色连帽羽绒服，包含正面、背面、袖标和胸标细节。",
+  "frontal_image": "D:\\测试素材\\20260625衣服资产\\B250246350DY_松烁沙\\B250246350DY_松烁沙1.png",
+  "reference_images": [
+    "D:\\测试素材\\20260625衣服资产\\B250246350DY_松烁沙\\B250246350DY_松烁沙7H03 女_B250246350DY-松烁沙7H03 2.png",
+    "D:\\测试素材\\20260625衣服资产\\B250246350DY_松烁沙\\B250246350DY_松烁沙7H03 女_B250246350DY-松烁沙7H03 7.jpg",
+    "D:\\测试素材\\20260625衣服资产\\B250246350DY_松烁沙\\B250246350DY_松烁沙7H03 女_B250246350DY-松烁沙7H03 4.jpg"
+  ],
+  "ok": true,
+  "task_id": "1444407842-CreateAigcAdvancedCustomElement-834b55f3368d4db00dfb26febe6c0de9t",
+  "request_id": "bc042f5b-a657-4df4-98d1-5039c6fee5cc",
+  "element_id": "316314471272233",
+  "query_element_id": "316314471272233",
+  "element": {
+    "element_id": 316314471272233,
+    "element_name": "B250246350DY松烁沙",
+    "element_description": "波司登米白色连帽羽绒服，包含正面、背面、袖标和胸标细节。",
+    "element_type": "image_refer",
+    "element_image_list": {
+      "frontal_image": "https://p4-kling.klingai.com/bs2/upload-ylab-stunt/muse/826925436873121851/IMAGE/20260718/76d8f9e9b555dfda476a3293d79c026b-04546136-fbc3-4347-935a-561e91a52a14?x-kcdn-pid=112452",
+      "refer_images": [
+        {
+          "image_url": "https://p4-kling.klingai.com/bs2/upload-ylab-stunt/muse/826925436873121851/IMAGE/20260718/a4918079eb79013e5f73107bac654126-a416d8af-c1b1-46a0-9aa7-c9c6c56ab05f?x-kcdn-pid=112452"
+        },
+        {
+          "image_url": "https://p4-kling.klingai.com/bs2/upload-ylab-stunt/muse/826925436873121851/IMAGE/20260718/117f661dbc63a08d8357330cab096d9b-c908960b-dee1-4084-a38c-46d53e671554?x-kcdn-pid=112452"
+        },
+        {
+          "image_url": "https://p4-kling.klingai.com/bs2/upload-ylab-stunt/muse/826925436873121851/IMAGE/20260718/779437c4a9b8768b6e6ec0359e5005e1-3fc9af13-0111-4544-8885-b5194aac9259?x-kcdn-pid=112452"
+        }
+      ]
+    },
+    "element_video_list": {},
+    "owned_by": "826925436873121851",
+    "status": "succeed"
+  },
+  "elapsed_s": 20.3115,
+  "oss_inputs_retained": false
+}

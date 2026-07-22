@@ -202,6 +202,14 @@ class BackendConfigTests(unittest.TestCase):
                 duration="5",
                 has_image_list=True,
             )
+        with self.assertRaisesRegex(ValueError, "does not support image_tail"):
+            kling_capabilities.validate_video_generation_request(
+                task_name="image2video",
+                model_name="kling-v3-turbo",
+                mode="std",
+                duration="5",
+                has_image_tail=True,
+            )
 
     def test_omni_reference_video_rejects_4k_mode(self):
         with self.assertRaisesRegex(ValueError, "does not support mode=4k with reference_video"):
@@ -1040,6 +1048,58 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(payload["OutputConfig"]["AspectRatio"], "9:16")
         self.assertEqual(payload["OutputConfig"]["Duration"], 5.0)
         self.assertEqual(payload["OutputConfig"]["AudioGeneration"], "Disabled")
+
+    def test_tencent_provider_maps_kling_v3_turbo_without_subject_references(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)
+        )
+
+        with mock.patch.object(provider, "_create_task", return_value={"TaskId": "task-turbo"}) as create_mock:
+            with mock.patch.object(provider, "_wait_for_video", return_value=SimpleNamespace(url="u", video_id="v")):
+                provider.generate_image2video(
+                    kling_nodes.Image2VideoRequest(
+                        model_name="kling-v3-turbo",
+                        prompt="animate this",
+                        mode="4k",
+                        duration="15",
+                        image_urls=["https://cdn.example.com/first.png"],
+                    )
+                )
+
+        payload = create_mock.call_args[0][0]
+        self.assertEqual(payload["ModelVersion"], "3.0-turbo")
+        self.assertEqual(payload["OutputConfig"]["Resolution"], "4K")
+        self.assertEqual(payload["OutputConfig"]["Duration"], 15.0)
+        self.assertEqual(
+            payload["FileInfos"],
+            [{
+                "Type": "Url",
+                "Category": "Image",
+                "Url": "https://cdn.example.com/first.png",
+                "Usage": "FirstFrame",
+            }],
+        )
+        self.assertNotIn("SubjectInfos", payload)
+
+        for request in (
+            kling_nodes.Text2VideoRequest(
+                model_name="kling-v3-turbo",
+                prompt="demo",
+                element_list=[{"element_id": "element-123"}],
+            ),
+            kling_nodes.Image2VideoRequest(
+                model_name="kling-v3-turbo",
+                prompt="demo",
+                image_urls=["https://cdn.example.com/first.png"],
+                element_list=[{"element_id": "element-123"}],
+            ),
+        ):
+            with self.subTest(request=type(request).__name__):
+                with self.assertRaisesRegex(ValueError, "does not support subject references"):
+                    if isinstance(request, kling_nodes.Text2VideoRequest):
+                        provider.generate_text2video(request)
+                    else:
+                        provider.generate_image2video(request)
 
     def test_tencent_provider_merges_extra_payload_and_output_config(self):
         provider = TencentVodVideoProvider(
