@@ -1049,6 +1049,37 @@ class BackendConfigTests(unittest.TestCase):
         self.assertEqual(payload["OutputConfig"]["Duration"], 5.0)
         self.assertEqual(payload["OutputConfig"]["AudioGeneration"], "Disabled")
 
+    def test_tencent_provider_validates_prompt_size_before_submission(self):
+        provider = TencentVodVideoProvider(
+            TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)
+        )
+
+        with mock.patch.object(provider, "_create_task", return_value={"TaskId": "task-boundary"}) as create_mock:
+            with mock.patch.object(provider, "_wait_for_video", return_value=SimpleNamespace(url="u", video_id="v")):
+                provider.generate_image2video(
+                    kling_nodes.Image2VideoRequest(
+                        model_name="kling-v3",
+                        prompt="字" * 2500,
+                        image_urls=["https://cdn.example.com/first.png"],
+                    )
+                )
+        self.assertEqual(len(create_mock.call_args[0][0]["Prompt"]), 2500)
+
+        with mock.patch.object(provider, "_create_task", return_value={"TaskId": "task-too-long"}) as create_mock:
+            with mock.patch.object(provider, "_wait_for_video", return_value=SimpleNamespace(url="u", video_id="v")):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"TENCENT_VOD_PROMPT_SIZE_INVALID.*2501.*2500.*1201",
+                ):
+                    provider.generate_image2video(
+                        kling_nodes.Image2VideoRequest(
+                            model_name="kling-v3",
+                            prompt="字" * 2501,
+                            image_urls=["https://cdn.example.com/first.png"],
+                        )
+                    )
+        create_mock.assert_not_called()
+
     def test_tencent_provider_maps_kling_v3_turbo_without_subject_references(self):
         provider = TencentVodVideoProvider(
             TencentVodVideoConfig(secret_id="sid", secret_key="skey", sub_app_id=123)

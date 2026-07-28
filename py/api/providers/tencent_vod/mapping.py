@@ -12,6 +12,9 @@ from ..base import (
     Text2VideoRequest,
 )
 
+TENCENT_VOD_PROMPT_MAX_CHARS = 2500
+TENCENT_VOD_PROMPT_SIZE_ERROR_CODE = "TENCENT_VOD_PROMPT_SIZE_INVALID"
+
 
 def _without_none(values: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in values.items() if value is not None}
@@ -127,6 +130,14 @@ def _base_video_payload(
     output_config: dict[str, Any],
     session_id: str,
 ) -> dict[str, Any]:
+    prompt = prompt or ""
+    prompt_size = len(prompt)
+    if prompt_size > TENCENT_VOD_PROMPT_MAX_CHARS:
+        raise ValueError(
+            f"[{TENCENT_VOD_PROMPT_SIZE_ERROR_CODE}] Tencent VOD prompt size is "
+            f"{prompt_size} characters; allowed range is 0 to "
+            f"{TENCENT_VOD_PROMPT_MAX_CHARS}. Upstream error code: 1201."
+        )
     payload = {
         "SubAppId": int(config.sub_app_id),
         "ModelName": "Kling",
