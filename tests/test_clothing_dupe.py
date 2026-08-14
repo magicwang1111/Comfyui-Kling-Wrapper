@@ -65,6 +65,27 @@ class ClothingDupeApiTests(unittest.TestCase):
         self.assertEqual(client.requests[0][1], "/solutions/e-commerce/clothing_dupe")
         self.assertEqual(client.requests[1][2]["params"], {"task_ids": "task-1"})
 
+    def test_live_succeed_status_prefers_tts_bgm_video(self):
+        client = DummyClient([
+            {"code": 0, "data": {"task_id": "task-live", "status": "submitted"}},
+            {
+                "code": 0,
+                "data": [{
+                    "id": "task-live",
+                    "status": "succeed",
+                    "outputs": [
+                        {"type": "video_silent", "url": "https://example.com/silent.mp4"},
+                        {"type": "video_tts_only", "url": "https://example.com/tts.mp4"},
+                        {"type": "video_bgm_only", "url": "https://example.com/bgm.mp4"},
+                        {"type": "video_tts_bgm", "url": "https://example.com/full.mp4"},
+                    ],
+                }],
+            },
+        ])
+        with mock.patch.object(clothing_dupe.time, "sleep"):
+            result = clothing_dupe.submit_and_wait(client, {"contents": []})
+        self.assertEqual(result.video_url, "https://example.com/full.mp4")
+
     def test_extract_task_id_keeps_documented_id_compatibility(self):
         self.assertEqual(
             clothing_dupe._extract_task_id({"data": {"id": "documented-task-id"}}),
@@ -81,7 +102,7 @@ class ClothingDupeApiTests(unittest.TestCase):
                 clothing_dupe.submit_and_wait(client, {"contents": []})
 
     def test_succeeded_task_requires_nonempty_product_video(self):
-        for outputs, expected in (([], "no product_video"), ([{"type": "product_video", "url": ""}], "empty product video URL")):
+        for outputs, expected in (([], "no supported video output"), ([{"type": "product_video", "url": ""}], "empty video URL")):
             client = DummyClient([
                 {"code": 0, "data": {"id": "task-bad"}},
                 {"code": 0, "data": [{"id": "task-bad", "status": "succeeded", "outputs": outputs}]},

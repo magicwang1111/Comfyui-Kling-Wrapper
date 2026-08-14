@@ -21,8 +21,16 @@ CLOTHING_DUPE_VOICE_IDS = (
 )
 
 _ACTIVE_STATUSES = {"submitted", "processing"}
-_SUCCESS_STATUSES = {"succeeded"}
+_SUCCESS_STATUSES = {"succeed", "succeeded"}
 _FAILURE_STATUSES = {"failed"}
+
+_VIDEO_OUTPUT_PRIORITY = (
+    "product_video",
+    "video_tts_bgm",
+    "video_tts_only",
+    "video_bgm_only",
+    "video_silent",
+)
 
 
 @dataclass
@@ -67,21 +75,25 @@ def _query_task(client, task_id: str) -> dict[str, Any]:
 
 def _extract_result(task: dict[str, Any], task_id: str) -> ClothingDupeResult:
     outputs = task.get("outputs") or []
-    video = next(
-        (
-            item
-            for item in outputs
-            if isinstance(item, dict) and _clean_text(item.get("type")) == "product_video"
-        ),
-        None,
-    )
+    video = None
+    for output_type in _VIDEO_OUTPUT_PRIORITY:
+        video = next(
+            (
+                item
+                for item in outputs
+                if isinstance(item, dict) and _clean_text(item.get("type")) == output_type
+            ),
+            None,
+        )
+        if video:
+            break
     if not video:
         raise RuntimeError(
-            f"Kling Clothing Dupe task {task_id} succeeded but returned no product_video output: {task}"
+            f"Kling Clothing Dupe task {task_id} succeeded but returned no supported video output: {task}"
         )
     video_url = _clean_text(video.get("url"))
     if not video_url:
-        raise RuntimeError(f"Kling Clothing Dupe task {task_id} returned an empty product video URL: {task}")
+        raise RuntimeError(f"Kling Clothing Dupe task {task_id} returned an empty video URL: {task}")
     return ClothingDupeResult(
         video_url=video_url,
         watermark_video_url=_clean_text(video.get("watermark_url")),
