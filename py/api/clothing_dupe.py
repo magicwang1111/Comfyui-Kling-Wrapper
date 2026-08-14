@@ -46,7 +46,7 @@ def _ensure_ok(response: dict[str, Any], action: str) -> None:
 
 def _extract_task_id(response: dict[str, Any]) -> str:
     data = response.get("data") or {}
-    task_id = _clean_text(data.get("id"))
+    task_id = _clean_text(data.get("task_id") or data.get("id"))
     if not task_id:
         raise RuntimeError(f"Kling Clothing Dupe task creation returned no task id: {response}")
     return task_id

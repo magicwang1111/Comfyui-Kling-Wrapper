@@ -36,7 +36,7 @@ class DummyClient:
 class ClothingDupeApiTests(unittest.TestCase):
     def test_submit_polls_and_extracts_product_video(self):
         client = DummyClient([
-            {"code": 0, "data": {"id": "task-1", "status": "submitted"}},
+            {"code": 0, "data": {"task_id": "task-1", "status": "submitted"}},
             {"code": 0, "data": [{"id": "task-1", "status": "processing"}]},
             {
                 "code": 0,
@@ -64,6 +64,12 @@ class ClothingDupeApiTests(unittest.TestCase):
         self.assertEqual(result.task_id, "task-1")
         self.assertEqual(client.requests[0][1], "/solutions/e-commerce/clothing_dupe")
         self.assertEqual(client.requests[1][2]["params"], {"task_ids": "task-1"})
+
+    def test_extract_task_id_keeps_documented_id_compatibility(self):
+        self.assertEqual(
+            clothing_dupe._extract_task_id({"data": {"id": "documented-task-id"}}),
+            "documented-task-id",
+        )
 
     def test_failed_task_preserves_server_message(self):
         client = DummyClient([
