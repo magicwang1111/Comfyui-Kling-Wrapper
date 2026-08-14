@@ -53,4 +53,5 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `25_tencent_vod_multimodal_video_edit.json`: Tencent VOD 3.0-Omni video editing with an image reference.
 - `26_tencent_vod_advanced_element_create.json`: Tencent VOD advanced subject creation.
 - `27_tencent_vod_custom_voice_create.json`: Tencent VOD custom voice creation and trial preview.
+- `28_comfyui_kling_wrapper_clothing_dupe.json`: official Kling Clothing Dupe workflow using uploaded video, product/model images, and BGM audio.
 - `api_examples.py`: small Python snippets that mirror the same upgraded API wrappers.

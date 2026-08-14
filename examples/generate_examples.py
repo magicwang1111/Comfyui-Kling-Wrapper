@@ -378,6 +378,43 @@ def virtual_try_on_node(node_id, pos, order):
     )
 
 
+def clothing_dupe_node(node_id, pos, order):
+    type_name = f"{NODE_PREFIX} Clothing Dupe"
+    return node(
+        node_id,
+        type_name,
+        pos,
+        [430, 420],
+        order,
+        [
+            "Lightweight breathable shirt for a clean commercial product showcase.",
+            "720p",
+            "16:9",
+            "无",
+        ],
+        inputs=[
+            input_slot("source_video", "VIDEO"),
+            input_slot("product_image_1", "IMAGE"),
+            input_slot("product_image_2", "IMAGE", None),
+            input_slot("product_image_3", "IMAGE", None),
+            input_slot("product_image_4", "IMAGE", None),
+            input_slot("product_image_5", "IMAGE", None),
+            input_slot("model_image_1", "IMAGE", None),
+            input_slot("model_image_2", "IMAGE", None),
+            input_slot("model_image_3", "IMAGE", None),
+            input_slot("model_image_4", "IMAGE", None),
+            input_slot("model_image_5", "IMAGE", None),
+            input_slot("bgm", "AUDIO", None),
+        ],
+        outputs=[
+            output_slot("video_url", "STRING", slot_index=0),
+            output_slot("watermark_video_url", "STRING", slot_index=1),
+            output_slot("task_id", "STRING", slot_index=2),
+            output_slot("result_json", "STRING", slot_index=3),
+        ],
+    )
+
+
 def image_expander_node(node_id, pos, order):
     type_name = f"{NODE_PREFIX} Image Expander"
     return node(
@@ -708,17 +745,18 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - Replace placeholder filenames such as `example_portrait.png`, `example_subject_front.png`, `example_subject_ref_1.png`, `example_cloth.png`, `example_scene.png`, `example_lipsync_source.mp4`, `example_lipsync_audio.wav`, and `example_voice_reference.mp3` with files that exist in your ComfyUI input directory.
 - Replace placeholder URLs such as `https://example.com/reference-motion.mp4` with real URLs when needed.
 - Native preset and cloned voices are available for `kling-v2-6`; the active API rejects `voice_list` for `kling-v3`.
-- Newer documented models such as `kling-video-o1` and `kling-v3-omni` are intentionally hidden from the visible dropdowns until live endpoint support is confirmed.
+- `kling-v3-omni` is visible in the video generation dropdowns for comparison with `kling-v3`; `kling-video-o1` remains hidden until live endpoint support is confirmed.
 
 ## Important workflow notes
 
 - `05_comfyui_kling_wrapper_text2video_v26_sound.json` is the native audio example and is built around `kling-v2-6`.
 - `06_comfyui_kling_wrapper_advanced_element_subject_to_image2video.json` requires 1 frontal portrait plus 1-3 additional photos of the same subject. Background or scene images do not count as advanced-element reference images.
 - If you need both subject binding and speech, generate the bound video first and then add speech with the lip-sync or audio nodes.
+- `kling-v3-omni` can combine `custom_voice_id` or `custom_voice_list` with `element_list`; older models still keep stricter local guards.
 - `Motion Control` accepts either a direct http(s) reference-video URL or uploaded/local video workflow inputs. For local media, use a video loader node that provides either `VIDEO` or `reference_video_frames` plus `reference_video_info`. Set `duration` to `auto` if you want it to match the uploaded motion reference length.
 - `Lip Sync` now calls `identify-face` and `advanced-lip-sync`; leave `face_id` empty to use the first detected face.
 - `Avatar` accepts one and only one of `AUDIO`, `audio_id`, `audio_file`, or `audio_url`.
-- `Image2Video.custom_voice_id` is supported by `kling-v2-6`; it requires `sound=on` and the `<<<voice_1>>>` marker in the prompt.
+- `Image2Video.custom_voice_id` is the single-custom-voice path. For multiple voices, connect `Custom Voice List Builder.custom_voice_list` to `Image2Video.custom_voice_list`, set `sound=on`, and use ordered markers such as `<<<voice_1>>>` and `<<<voice_2>>>`.
 
 ## Included files
 
@@ -749,6 +787,7 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 - `25_tencent_vod_multimodal_video_edit.json`: Tencent VOD 3.0-Omni video editing with an image reference.
 - `26_tencent_vod_advanced_element_create.json`: Tencent VOD advanced subject creation.
 - `27_tencent_vod_custom_voice_create.json`: Tencent VOD custom voice creation and trial preview.
+- `28_comfyui_kling_wrapper_clothing_dupe.json`: official Kling Clothing Dupe workflow using uploaded video, product/model images, and BGM audio.
 - `api_examples.py`: small Python snippets that mirror the same upgraded API wrappers.
 """
     (ROOT / "README.md").write_text(content, encoding="utf-8")
@@ -1457,6 +1496,30 @@ def generate_workflows():
     nodes[1]["outputs"][2]["links"] = [2]
     nodes[2]["inputs"][0]["link"] = 2
     examples["27_tencent_vod_custom_voice_create.json"] = workflow(nodes, links)
+
+    nodes = [
+        load_video_node(1, "example_clothing_reference.mp4", [40, 40], 0),
+        load_image_node(2, "example_product.png", [40, 250], 1),
+        load_image_node(3, "example_model.png", [40, 610], 2),
+        load_audio_node(4, "example_bgm.wav", [40, 980], 3),
+        clothing_dupe_node(5, [430, 300], 4),
+        preview_video_node(6, [930, 300], 5, 5),
+    ]
+    links = [
+        link(1, 1, 0, 5, 0, "VIDEO"),
+        link(2, 2, 0, 5, 1, "IMAGE"),
+        link(3, 3, 0, 5, 6, "IMAGE"),
+        link(4, 4, 0, 5, 11, "AUDIO"),
+        link(5, 5, 0, 6, 0, "STRING"),
+    ]
+    for index, link_id in enumerate((1, 2, 3, 4)):
+        nodes[index]["outputs"][0]["links"] = [link_id]
+    nodes[4]["inputs"][0]["link"] = 1
+    nodes[4]["inputs"][1]["link"] = 2
+    nodes[4]["inputs"][6]["link"] = 3
+    nodes[4]["inputs"][11]["link"] = 4
+    nodes[4]["outputs"][0]["links"] = [5]
+    examples["28_comfyui_kling_wrapper_clothing_dupe.json"] = workflow(nodes, links)
 
     for name, data in examples.items():
         write_json(name, strip_client_dependency(data))

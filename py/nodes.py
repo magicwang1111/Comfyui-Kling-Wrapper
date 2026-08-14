@@ -1,7 +1,7 @@
 from .api import AdvancedLipSync, Avatar, Client, FaceIdentify, ImageGenerator, ImageExpander, Image2Video, \
     Video2Audio, Text2Audio, Text2Video, CameraControl, CameraControlConfig, KolorsVurtualTryOn, VideoExtend, \
     LipSyncInput, EffectInput, Effects, MultiImages2Video, MultiModelVideoEdit, AdvancedCustomElements, \
-    MotionControl, CustomVoiceCreate, CustomVoiceQuery, TTS
+    MotionControl, CustomVoiceCreate, CustomVoiceQuery, TTS, CLOTHING_DUPE_VOICE_IDS, submit_clothing_dupe
 from .api.capabilities import CUSTOM_VOICE_LIST_TYPE, DEFAULT_IMAGE_RESOLUTIONS, DEFAULT_MODES, \
     DEFAULT_VIDEO_ASPECT_RATIOS, DEFAULT_VIDEO_DURATIONS, ELEMENT_LIST_TYPE, ELEMENT_TYPE, \
     EXTENDED_IMAGE_ASPECT_RATIOS, IMAGE_GENERATION_MODELS, IMAGE_TO_VIDEO_MODELS, LIPSYNC_INPUT_TYPE, \
@@ -77,6 +77,21 @@ TMPFILES_UPLOAD_RETRY_COUNT = 3
 TMPFILES_UPLOAD_RETRY_DELAY = 1.0
 LOCAL_MEDIA_UPLOAD_SUBFOLDER = "kling_uploads"
 DEFAULT_REFERENCE_VIDEO_FPS = 24.0
+CLOTHING_DUPE_ASPECT_RATIOS = ["auto", "9:16", "2:3", "3:4", "1:1", "4:3", "3:2", "16:9", "21:9"]
+CLOTHING_DUPE_VOICE_ID_BY_LABEL = {
+    "无": None,
+    "活力带货女": "energetic_sales_girl",
+    "温柔带货女": "gentle_sales_woman",
+    "清脆带货女": "crisp_sales_girl",
+    "知性带货女": "mature_sales_woman",
+    "平静带货女": "calm_sales_woman",
+    "柔和带货女": "soft_sales_woman",
+    "活力带货男": "energetic_sales_boy",
+    "热情带货男": "enthusiastic_sales_man",
+    "沉稳带货男": "steady_sales_man",
+    "平静带货男": "calm_sales_man",
+}
+CLOTHING_DUPE_VOICE_OPTIONS = list(CLOTHING_DUPE_VOICE_ID_BY_LABEL)
 LIPSYNC_AUDIO_TYPES = {
     "阳光少年": "genshin_vindi2",
     "懂事小弟": "zhinen_xuesheng",
@@ -602,6 +617,38 @@ def _upload_image_batch_references(image):
                 os.remove(temp_path)
 
     return uploaded_urls
+
+
+def _validate_clothing_dupe_image_inputs(image_inputs, field_name, required):
+    images = []
+    for image in image_inputs:
+        if image is not None:
+            images.extend(_tensor2images(image))
+    if required and not images:
+        raise ValueError(f"{field_name} must contain at least one image.")
+    if len(images) > 5:
+        raise ValueError(f"{field_name} supports at most 5 images.")
+    for index, frame in enumerate(images, start=1):
+        width, height = frame.size
+        if width < 300 or height < 300:
+            raise ValueError(f"{field_name}[{index}] must be at least 300px in both dimensions.")
+        aspect_ratio = width / height
+        if not 0.4 <= aspect_ratio <= 2.5:
+            raise ValueError(f"{field_name}[{index}] aspect ratio must be between 1:2.5 and 2.5:1.")
+    return images
+
+
+def _validate_clothing_dupe_video(video):
+    if video is None:
+        raise ValueError("source_video is required.")
+    get_duration = getattr(video, "get_duration", None)
+    if callable(get_duration):
+        try:
+            duration = float(get_duration())
+        except Exception:
+            duration = None
+        if duration is not None and not 5 <= duration <= 180:
+            raise ValueError("source_video duration must be between 5 and 180 seconds.")
 
 
 def _parse_json_input(raw_value, field_name):
@@ -2376,6 +2423,140 @@ class KolorsVirtualTryOnNode:
             img = _images2tensor(_decode_image(_fetch_image(image_info.url)))
             print(f'KLing API output: {image_info.url}')
             return (img,)
+
+
+class ClothingDupeNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "product_info": ("STRING", {"multiline": True, "default": ""}),
+                "source_video": ("VIDEO",),
+                "product_image_1": ("IMAGE",),
+                "resolution": (["720p", "1080p"], {"default": "720p"}),
+                "aspect_ratio": (CLOTHING_DUPE_ASPECT_RATIOS, {"default": "auto"}),
+                "voice_id": (CLOTHING_DUPE_VOICE_OPTIONS, {"default": "无"}),
+            },
+            "optional": {
+                "product_image_2": ("IMAGE",),
+                "product_image_3": ("IMAGE",),
+                "product_image_4": ("IMAGE",),
+                "product_image_5": ("IMAGE",),
+                "model_image_1": ("IMAGE",),
+                "model_image_2": ("IMAGE",),
+                "model_image_3": ("IMAGE",),
+                "model_image_4": ("IMAGE",),
+                "model_image_5": ("IMAGE",),
+                "bgm": ("AUDIO",),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("video_url", "watermark_video_url", "task_id", "result_json")
+    FUNCTION = "generate"
+    OUTPUT_NODE = False
+    CATEGORY = NODE_CATEGORY
+
+    def generate(
+            self,
+            product_info,
+            source_video,
+            product_image_1,
+            resolution,
+            aspect_ratio,
+            voice_id,
+            product_image_2=None,
+            product_image_3=None,
+            product_image_4=None,
+            product_image_5=None,
+            model_image_1=None,
+            model_image_2=None,
+            model_image_3=None,
+            model_image_4=None,
+            model_image_5=None,
+            bgm=None,
+            watermark_enabled=False,
+            callback_url="",
+            external_task_id="",
+    ):
+        product_info = str(product_info or "").strip()
+        if not product_info:
+            raise ValueError("product_info is required.")
+        if len(product_info) > 2500:
+            raise ValueError("product_info must be 2500 characters or fewer.")
+        if resolution not in {"720p", "1080p"}:
+            raise ValueError("resolution must be 720p or 1080p.")
+        if aspect_ratio not in CLOTHING_DUPE_ASPECT_RATIOS:
+            raise ValueError("aspect_ratio is not supported by Clothing Dupe.")
+        _validate_clothing_dupe_video(source_video)
+        product_image_inputs = [
+            product_image_1,
+            product_image_2,
+            product_image_3,
+            product_image_4,
+            product_image_5,
+        ]
+        model_image_inputs = [
+            model_image_1,
+            model_image_2,
+            model_image_3,
+            model_image_4,
+            model_image_5,
+        ]
+        _validate_clothing_dupe_image_inputs(product_image_inputs, "product_images", required=True)
+        _validate_clothing_dupe_image_inputs(model_image_inputs, "model_images", required=False)
+
+        voice_value = str(voice_id or "无").strip() or "无"
+        if voice_value in CLOTHING_DUPE_VOICE_ID_BY_LABEL:
+            resolved_voice_id = CLOTHING_DUPE_VOICE_ID_BY_LABEL[voice_value]
+        elif voice_value in CLOTHING_DUPE_VOICE_IDS:
+            resolved_voice_id = voice_value
+        else:
+            raise ValueError("voice_id must be one of the official Clothing Dupe voice names.")
+
+        contents = [
+            {"type": "product_info", "text": product_info},
+            {"type": "source_video", "url": _upload_video_reference(source_video)},
+        ]
+        for product_image in product_image_inputs:
+            if product_image is None:
+                continue
+            contents.extend(
+                {"type": "product_image", "url": url}
+                for url in _upload_image_batch_references(product_image)
+            )
+        for model_image in model_image_inputs:
+            if model_image is None:
+                continue
+            contents.extend(
+                {"type": "model_image", "url": url}
+                for url in _upload_image_batch_references(model_image)
+            )
+        if bgm is not None:
+            contents.append({"type": "bgm", "url": _upload_audio_reference(bgm)})
+        if resolved_voice_id:
+            contents.append({"type": "voice", "voice_id": resolved_voice_id})
+
+        settings = {"resolution": resolution}
+        if aspect_ratio != "auto":
+            settings["aspect_ratio"] = aspect_ratio
+        options = {"watermark_info": {"enabled": bool(watermark_enabled)}}
+        callback_url = str(callback_url or "").strip()
+        external_task_id = str(external_task_id or "").strip()
+        if callback_url:
+            options["callback_url"] = callback_url
+        if external_task_id:
+            options["external_task_id"] = external_task_id
+
+        payload = {"contents": contents, "settings": settings, "options": options}
+        with _runtime_client() as client:
+            result = submit_clothing_dupe(client, payload)
+        return (
+            result.video_url,
+            result.watermark_video_url,
+            result.task_id,
+            json.dumps(result.raw, ensure_ascii=False),
+        )
 
 
 class PreviewVideo:

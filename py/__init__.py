@@ -1,5 +1,5 @@
 from .api.capabilities import NODE_PREFIX
-from .nodes import AdvancedCustomElementCreateNode, AdvancedCustomElementDeleteNode, AdvancedCustomElementQueryNode, AvatarNode, CustomVoiceListBuilderNode, EffectNode, ElementListBuilderNode, \
+from .nodes import AdvancedCustomElementCreateNode, AdvancedCustomElementDeleteNode, AdvancedCustomElementQueryNode, AvatarNode, ClothingDupeNode, CustomVoiceListBuilderNode, EffectNode, ElementListBuilderNode, \
     Image2VideoNode, ImageExpanderNode, ImageGeneratorNode, KolorsVirtualTryOnNode, LipSyncAudioInputNode, \
     LipSyncNode, LipSyncTextInputNode, MotionControlNode, MultiImagesToVideoNode, MultiModalVideoEditNode, PreviewAudio, PreviewVideo, Text2VideoNode, \
     TextToAudioNode, Video2AudioNode, VideoExtendNode, CustomVoiceCreateNode, CustomVoiceQueryNode, TTSNode
@@ -24,6 +24,7 @@ NODE_CLASS_MAPPINGS = {
     _node_name("Multi Images To Video"): MultiImagesToVideoNode,
     _node_name("Multi Modal Video Edit"): MultiModalVideoEditNode,
     _node_name("Virtual Try On"): KolorsVirtualTryOnNode,
+    _node_name("Clothing Dupe"): ClothingDupeNode,
     _node_name("Preview Video"): PreviewVideo,
     _node_name("Preview Audio"): PreviewAudio,
     _node_name("Video Extender"): VideoExtendNode,

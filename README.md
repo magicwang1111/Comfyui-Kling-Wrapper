@@ -2,7 +2,7 @@
 
 Comfyui-Kling-Wrapper is a ComfyUI custom node pack for calling the Kling AI API directly inside ComfyUI.
 
-It bundles image generation, text-to-video, image-to-video, multi-image video, advanced custom elements, motion control, advanced lip sync, Avatar image-to-video, text/video to audio, TTS, custom voice creation, effects, virtual try-on, image expansion, and local preview helpers under the `Comfyui-Kling-Wrapper` category.
+It bundles image generation, text-to-video, image-to-video, multi-image video, advanced custom elements, motion control, advanced lip sync, Avatar image-to-video, Clothing Dupe, text/video to audio, TTS, custom voice creation, effects, virtual try-on, image expansion, and local preview helpers under the `Comfyui-Kling-Wrapper` category.
 
 ## Highlights
 
@@ -157,6 +157,7 @@ Python dependencies are listed in [requirements.txt](./requirements.txt).
 - `Comfyui-Kling-Wrapper Image2Video`
 - `Comfyui-Kling-Wrapper Multi Images To Video`
 - `Comfyui-Kling-Wrapper Virtual Try On`
+- `Comfyui-Kling-Wrapper Clothing Dupe`
 - `Comfyui-Kling-Wrapper Video Extender`
 - `Comfyui-Kling-Wrapper Lip Sync`
 - `Comfyui-Kling-Wrapper Lip Sync Text Input`
@@ -251,6 +252,18 @@ For multiple custom voices, connect one or more `Custom Voice Create.voice_id` o
 
 For official or manually supplied preset voice IDs, use the dedicated `TTS` node. It calls `/v1/audio/tts` and returns an `audio_url` that can be saved or previewed with `Preview Audio`.
 
+## Clothing Dupe notes
+
+`Clothing Dupe` calls the official Kling `POST /solutions/e-commerce/clothing_dupe` endpoint and polls `GET /solutions` until the task completes. It always uses the official Kling credentials from `config.local.json` or environment variables, regardless of `provider_default`; Tencent VOD and Vapeur are not used by this node.
+
+Connect one ComfyUI `VIDEO`, 1-5 product images through the separate `product_image_1` ... `product_image_5` sockets, and optionally up to 5 model images through `model_image_1` ... `model_image_5` plus one `AUDIO` input for BGM. The official API accepts exactly one source video and at most one BGM audio file. The wrapper uploads these inputs through the existing OSS or temporary-media upload chain before submitting the task. Product and model images must be at least 300px in both dimensions with an aspect ratio between `1:2.5` and `2.5:1`.
+
+The node returns the normal product-video URL, the optional watermarked URL, the task ID, and the complete task result as JSON. Connect either non-empty video URL to `Preview Video` to save and preview the generated clip.
+
+The `voice_id` dropdown shows the official voice library with Chinese display names. The wrapper maps the selected Chinese name to Kling's required English `voice_id` before submission.
+
+Watermark, callback URL, and external task ID controls are intentionally hidden from the ComfyUI node. Front-end workflows submit with watermark disabled and without callback or external task identifiers.
+
 ## Kling v3 Turbo notes
 
 `kling-v3-turbo` is available in the `Text2Video` and `Image2Video` model dropdowns for the official Kling provider. It uses the newer `/text-to-video/kling-3.0-turbo`, `/image-to-video/kling-3.0-turbo`, and `/tasks` API shape with static Bearer-token auth.
@@ -278,6 +291,7 @@ The workflow JSON files no longer depend on a front-end `Client` node. Prepare `
 - [Kling custom voice API documentation](https://klingai.com/document-api/apiReference/model/customVoices)
 - [Kling advanced lip-sync API documentation](https://klingai.com/document-api/api/video/lip-sync)
 - [Kling Avatar API documentation](https://klingai.com/document-api/api/video/avatar)
+- [Kling Clothing Dupe API documentation](https://klingai.com/document-api/api/ecommerce-replication/apparel)
 - [Kling 3.0 custom voice documentation](https://klingai.com/document-api/api/video/3-0-omni/voice-customization)
 - [Kling 3.0 Turbo text-to-video documentation](https://klingai.com/document-api/api/video/3-0-turbo/text-to-video)
 - [Kling 3.0 series capability map](https://docs.qingque.cn/d/home/eZQCedMeoI1MTquS1SFRihz4S?identityId=1oEFzU43FYK)

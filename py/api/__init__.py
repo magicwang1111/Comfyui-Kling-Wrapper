@@ -17,3 +17,4 @@ from .custom_elements import AdvancedCustomElements
 from .motion_control import MotionControl
 from .custom_voice import CustomVoiceCreate, CustomVoiceQuery
 from .tts import TTS
+from .clothing_dupe import CLOTHING_DUPE_VOICE_IDS, ClothingDupeResult, submit_and_wait as submit_clothing_dupe
