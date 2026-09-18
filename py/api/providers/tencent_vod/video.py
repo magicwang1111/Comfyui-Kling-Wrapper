@@ -5,6 +5,8 @@ import time
 import uuid
 from typing import Any
 
+import requests
+
 from .client import TencentVodClient, TencentVodError
 from .mapping import (
     build_image2video_payload,
@@ -125,10 +127,23 @@ class TencentVodVideoProvider:
         task_id: str,
         preferred_keys: tuple[str, ...],
     ) -> dict[str, Any]:
-        started = time.monotonic()
+        deadline = time.monotonic() + self._config.max_wait_seconds
         last_status = None
+        last_timeout = None
         while True:
-            detail = self._describe_task(task_id)
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Tencent VOD task {task_id} did not finish within "
+                    f"{self._config.max_wait_seconds} seconds."
+                ) from last_timeout
+            try:
+                detail = self._describe_task(task_id)
+            except requests.exceptions.Timeout as exc:
+                last_timeout = exc
+                print(f"[Tencent VOD] task {task_id}: status query timed out; retrying same task")
+                time.sleep(min(self._config.poll_interval, max(0.0, deadline - time.monotonic())))
+                continue
+            last_timeout = None
             task = self._extract_task(detail, preferred_keys)
             status = self._normalize_status(task)
             if status != last_status:
@@ -144,12 +159,7 @@ class TencentVodVideoProvider:
                         f"{error or task.get('Message') or task}"
                     )
                 return task
-            if time.monotonic() - started > self._config.max_wait_seconds:
-                raise TimeoutError(
-                    f"Tencent VOD task {task_id} did not finish within "
-                    f"{self._config.max_wait_seconds} seconds."
-                )
-            time.sleep(self._config.poll_interval)
+            time.sleep(min(self._config.poll_interval, max(0.0, deadline - time.monotonic())))
 
     @staticmethod
     def _extract_urls(task: dict[str, Any] | None) -> list[str]:
