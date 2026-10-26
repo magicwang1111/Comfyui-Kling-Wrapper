@@ -1,4 +1,5 @@
 from .api.capabilities import NODE_PREFIX
+from .nodes_v4 import Kling4Text2Video, Kling4Image2Video, Kling4OmniVideo
 from .nodes import AdvancedCustomElementCreateNode, AdvancedCustomElementDeleteNode, AdvancedCustomElementQueryNode, AvatarNode, ClothingDupeNode, CustomVoiceListBuilderNode, EffectNode, ElementListBuilderNode, \
     Image2VideoNode, ImageExpanderNode, ImageGeneratorNode, KolorsVirtualTryOnNode, LipSyncAudioInputNode, \
     LipSyncNode, LipSyncTextInputNode, MotionControlNode, MultiImagesToVideoNode, MultiModalVideoEditNode, PreviewAudio, PreviewVideo, Text2VideoNode, \
@@ -10,6 +11,9 @@ def _node_name(label):
 
 
 NODE_CLASS_MAPPINGS = {
+    _node_name("Kling 4.0 Text2Video"): Kling4Text2Video,
+    _node_name("Kling 4.0 Image2Video"): Kling4Image2Video,
+    _node_name("Kling 4.0 OmniVideo"): Kling4OmniVideo,
     _node_name("Image Generator"): ImageGeneratorNode,
     _node_name("Image Expander"): ImageExpanderNode,
     _node_name("TextToAudio"): TextToAudioNode,

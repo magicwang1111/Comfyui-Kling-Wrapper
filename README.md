@@ -14,6 +14,35 @@ It bundles image generation, text-to-video, image-to-video, multi-image video, a
 
 ## Current model visibility
 
+### Kling 4.0 独立节点
+
+新增 `Comfyui-Kling-Wrapper / Kling 4.0` 分类：`Kling 4.0 Text2Video`、`Kling 4.0 Image2Video`、`Kling 4.0 OmniVideo`。重启 ComfyUI 后刷新浏览器即可搜索到。这三个节点固定调用官方接口，使用已有官方 `api_key` 或 AK/SK 配置，不跟随 `provider_default` 切换腾讯云或 Vapeur；旧节点继续沿用原有配置。
+
+- 清晰度为 `720p / 1080p`，时长为 `auto / 3–30` 秒；`auto` 不发送时长参数，由接口按提示词和素材决定。
+- 文生支持 `21:9 / 16:9 / 9:16 / 1:1`；全能参考另支持 `adaptive`；图生按输入帧确定画幅。
+- 负向要求、镜头和声音写入提示词，不提供旧版 `cfg_scale`、`negative_prompt`、`camera_control`、`sound` 控件。
+- 图生及全能节点保留原生提示词文本框，下方同步显示彩色引用预览；点击彩色按钮可在光标处插入引用。预览不是文本框内语法高亮，不会改变实际提交的提示词；颜色仅区分素材类型，不代表素材已经连接或验证通过。
+- 全能节点直接接现有 `Element List Builder`、`Custom Voice List Builder` 输出；主体及音色仍须在对应官方账号下可用。无需新建管理或素材构建节点。
+- 输出仍为 `url / video_id`，可连接现有 `Preview Video`。任务提交后记录任务 ID；查询失败时保留 ID，便于先查询任务再决定是否重新生成。
+
+| 输入 | 提示词引用 |
+|---|---|
+| `reference_images` 图片批次 | `@image_1`、`@image_2`… |
+| `first_frame` 单张首帧 | `@first_frame` |
+| `middle_frames` 中间帧批次 | `@middle_frame_1`、`@middle_frame_2`… |
+| `last_frame` 单张尾帧 | `@last_frame` |
+| 视频：`base_video` 或 `base_video_url`，然后 `feature_video`，然后 `feature_video_urls` 每行一个 URL | 按上述顺序编号 `@video_1`、`@video_2`… |
+| `element_list` 主体列表 | `@element_1`、`@element_2`… |
+| `custom_voice_list` 音色列表 | `@voice_1`、`@voice_2`… |
+
+参考图与关键帧编号独立。待编辑视频只能选择 `base_video` 或 `base_video_url` 之一；VIDEO 输入沿用现有上传服务，图片通过 base64 发送。素材数量、视频规格等服务端限制以所附 4.0 文档为准。
+
+导入示例：[文生](examples/kling4_text2video.json)、[图生](examples/kling4_image2video.json)、[全能参考](examples/kling4_omnivideo.json)。后两个示例需要在 Load Image 中选择本地图片。离线测试及本地 UI 验证不等同于真实生成成功，实际可用性取决于账号权限与官方服务。
+
+更多完整场景：[动作参考](examples/kling4_motion_reference.json)、[编辑原视频服装](examples/kling4_video_edit.json)、[固定主体与音色](examples/kling4_subject_voice.json)、[首中尾帧](examples/kling4_keyframes.json)。各例包含中文说明和已接好的输入、预览节点，替换项见 [示例说明](examples/README.md#kling-40-workflows)。
+
+### 旧版节点模型列表
+
 The plugin keeps the visible model dropdowns aligned with models confirmed for the active integration paths.
 
 Visible image generation models:

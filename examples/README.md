@@ -4,6 +4,26 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 
 ## Before running the workflows
 
+### Kling 4.0 workflows
+
+将下列 JSON 拖入 ComfyUI 或使用“打开”导入。每个示例均带中文说明、已填写的提示词及接好的 `Preview Video`，无需手动接线。替换占位素材后运行会提交真实生成任务。
+
+| 示例 | 用途 | 运行前替换 |
+|---|---|---|
+| [kling4_text2video.json](kling4_text2video.json) | 文生视频 | 按需要修改提示词 |
+| [kling4_image2video.json](kling4_image2video.json) | 单张图片动起来 | 首帧图片 |
+| [kling4_omnivideo.json](kling4_omnivideo.json) | 人物外观参考 | 参考图片 |
+| [kling4_motion_reference.json](kling4_motion_reference.json) | 自己的模特参考视频动作 | 模特图片、动作视频 |
+| [kling4_video_edit.json](kling4_video_edit.json) | 修改原视频中的服装 | 服装参考图、待编辑视频 |
+| [kling4_subject_voice.json](kling4_subject_voice.json) | 固定主体配指定音色 | 已完成的主体创建任务 ID、音色创建任务 ID |
+| [kling4_keyframes.json](kling4_keyframes.json) | 首、中、尾帧控制 | 三张关键帧图片 |
+
+4.0 生成节点固定使用官方配置，不受 `provider_default` 影响。**主体配音范例中的现有查询节点会遵循 `provider_default`，因此运行该例前请将其设为 `official`，并使用同一官方账号创建的资产。** 填写的是创建任务 ID，不是 `element_id` 或 `voice_id`；查询结果经过现有列表节点接入全能生成节点，不会重新创建主体或音色。
+
+图片、视频在对应 Load 节点上传或选择即可。动作参考视频连接 `feature_video`，待编辑原视频连接 `base_video`；两个例子都只有一个视频，因此均引用 `@video_1`。关键帧使用独立引用名，不占用参考图的 `@image_1` 编号。示例已在本地 ComfyUI 中完成导入及 API 参数导出检查，未调用付费生成接口。
+
+### Other workflows
+
 - Create and fill in `config.local.json` in the repository root before importing the workflows.
 - You can copy `config.example.json` in the repository root as a starting template.
 - The provider is configured globally in `config.local.json` and is intentionally not exposed as a node widget. Use `"provider_default": "official"` for Kling or `"provider_default": "tencent_vod"` for Tencent VOD.
