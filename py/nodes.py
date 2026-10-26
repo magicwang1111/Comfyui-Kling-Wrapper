@@ -3476,6 +3476,7 @@ class AdvancedCustomElementCreateNode:
                 "video_url": ("STRING", {"multiline": False, "default": ""}),
                 "element_voice_id": ("STRING", {"multiline": False, "default": ""}),
                 "extra_payload_json": ("STRING", {"multiline": True, "default": ""}),
+                "reference_video_input": ("VIDEO", {"tooltip": "连接 Load Video 上传本地视频。video_character 模式下优先使用此输入，否则使用 video_url。"}),
             }
         }
 
@@ -3496,6 +3497,7 @@ class AdvancedCustomElementCreateNode:
             video_url="",
             element_voice_id="",
             extra_payload_json="",
+            reference_video_input=None,
     ):
         provider = _resolve_video_provider(provider)
         generator = AdvancedCustomElements()
@@ -3540,8 +3542,10 @@ class AdvancedCustomElementCreateNode:
                 "refer_images": [{"image_url": image_b64} for image_b64 in merged_image_list[1:]],
             }
         elif element_type == "video_character":
+            if reference_video_input is not None:
+                video_url = _upload_video_reference(reference_video_input)
             if not video_url.strip():
-                raise ValueError("video_character requires video_url.")
+                raise ValueError("video_character requires reference_video_input or video_url.")
             generator.element_video_list = {
                 "refer_videos": [{"video_url": video_url.strip()}],
             }

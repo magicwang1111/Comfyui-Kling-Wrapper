@@ -39,7 +39,7 @@ It bundles image generation, text-to-video, image-to-video, multi-image video, a
 
 导入示例：[文生](examples/kling4_text2video.json)、[图生](examples/kling4_image2video.json)、[全能参考](examples/kling4_omnivideo.json)。后两个示例需要在 Load Image 中选择本地图片。离线测试及本地 UI 验证不等同于真实生成成功，实际可用性取决于账号权限与官方服务。
 
-更多完整场景：[动作参考](examples/kling4_motion_reference.json)、[编辑原视频服装](examples/kling4_video_edit.json)、[固定主体与音色](examples/kling4_subject_voice.json)、[首中尾帧](examples/kling4_keyframes.json)。各例包含中文说明和已接好的输入、预览节点，替换项见 [示例说明](examples/README.md#kling-40-workflows)。
+更多完整场景：[动作参考](examples/kling4_motion_reference.json)、[编辑原视频服装](examples/kling4_video_edit.json)、[图片创建主体与音色](examples/kling4_subject_voice.json)、[视频创建主体与音色](examples/kling4_video_subject_voice.json)、[首中尾帧](examples/kling4_keyframes.json)。各例包含中文说明和已接好的输入、预览节点，替换项见 [示例说明](examples/README.md#kling-40-workflows)。
 
 ### 旧版节点模型列表
 

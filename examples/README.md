@@ -15,12 +15,15 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 | [kling4_omnivideo.json](kling4_omnivideo.json) | 人物外观参考 | 参考图片 |
 | [kling4_motion_reference.json](kling4_motion_reference.json) | 自己的模特参考视频动作 | 模特图片、动作视频 |
 | [kling4_video_edit.json](kling4_video_edit.json) | 修改原视频中的服装 | 服装参考图、待编辑视频 |
-| [kling4_subject_voice.json](kling4_subject_voice.json) | 固定主体配指定音色 | 已完成的主体创建任务 ID、音色创建任务 ID |
+| [kling4_subject_voice.json](kling4_subject_voice.json) | 上传素材创建主体与音色，再生成视频 | 同一人物的正面照、另一角度参考照、单人说话音频 |
+| [kling4_video_subject_voice.json](kling4_video_subject_voice.json) | 上传视频创建主体，配指定音色生成视频 | 主体参考视频、单人说话音频 |
 | [kling4_keyframes.json](kling4_keyframes.json) | 首、中、尾帧控制 | 三张关键帧图片 |
 
-4.0 生成节点固定使用官方配置，不受 `provider_default` 影响。**主体配音范例中的现有查询节点会遵循 `provider_default`，因此运行该例前请将其设为 `official`，并使用同一官方账号创建的资产。** 填写的是创建任务 ID，不是 `element_id` 或 `voice_id`；查询结果经过现有列表节点接入全能生成节点，不会重新创建主体或音色。
+4.0 生成节点固定使用官方配置，不受 `provider_default` 影响。**主体配音范例中的创建节点会遵循 `provider_default`，运行前请将其设为 `official`，并配置同一官方账号及素材上传服务。** 在两个 `Load Image` 中上传同一人物的正面照和另一角度参考照，在 `Load Audio` 中上传单人说话音频，修改主体名称、描述及音色名称后运行。也可在 `Load Audio` 中选择支持的视频文件，提取其音轨作为音色参考。工作流会创建主体和音色，经列表节点自动接入全能生成节点，无需手填任务 ID。
 
 图片、视频在对应 Load 节点上传或选择即可。动作参考视频连接 `feature_video`，待编辑原视频连接 `base_video`；两个例子都只有一个视频，因此均引用 `@video_1`。关键帧使用独立引用名，不占用参考图的 `@image_1` 编号。示例已在本地 ComfyUI 中完成导入及 API 参数导出检查，未调用付费生成接口。
+
+视频主体范例使用 `Load Video → Advanced Element Create.reference_video_input`，已选择 `video_character`。首次使用新增接口前，请重启 ComfyUI 并刷新页面。连接本地视频时会自动上传，优先于 `video_url`；不连接时仍可使用视频 URL。
 
 ### Other workflows
 

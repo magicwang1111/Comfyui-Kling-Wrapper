@@ -1562,6 +1562,60 @@ class BackendConfigTests(unittest.TestCase):
         )
         self.assertIs(captured["client"], sentinel_client)
 
+    def test_advanced_element_uploads_local_video_for_all_providers(self):
+        class FakeVideo:
+            def save_to(self, path):
+                Path(path).write_bytes(b"reference-video")
+
+        uploaded_paths = []
+
+        def upload(path):
+            self.assertEqual(Path(path).read_bytes(), b"reference-video")
+            uploaded_paths.append(path)
+            return "https://example.com/uploaded-reference.mp4"
+
+        expected = {"refer_videos": [{"video_url": "https://example.com/uploaded-reference.mp4"}]}
+        for provider in (OFFICIAL_PROVIDER, TENCENT_VOD_PROVIDER, kling_providers.VAPEUR_PROVIDER):
+            with self.subTest(provider=provider):
+                captured = {}
+
+                def capture(generator, client):
+                    captured.update(generator.to_dict())
+                    return SimpleNamespace(task_id="task-123")
+
+                with (
+                    mock.patch.object(kling_nodes, "_upload_file_to_temporary_media_host", side_effect=upload),
+                    mock.patch.object(kling_nodes, "_runtime_client"),
+                    mock.patch.object(kling_nodes.AdvancedCustomElements, "run", capture),
+                    mock.patch.object(kling_nodes, "_video_provider") as backend,
+                ):
+                    backend.return_value.__enter__.return_value.create_element.return_value = SimpleNamespace(
+                        element={"element_id": "element-123"}, element_id="element-123"
+                    )
+                    kling_nodes.AdvancedCustomElementCreateNode().create(
+                        element_type="video_character",
+                        element_name="actor",
+                        element_description="Character reference",
+                        provider=provider,
+                        reference_video_input=FakeVideo(),
+                        video_url="https://example.com/unused.mp4",
+                    )
+                    if provider == OFFICIAL_PROVIDER:
+                        self.assertEqual(captured["element_video_list"], expected)
+                        self.assertEqual(captured["reference_type"], "video_refer")
+                    else:
+                        request = backend.return_value.__enter__.return_value.create_element.call_args.args[0]
+                        self.assertEqual(request.element_video_list, expected)
+                        self.assertEqual(request.reference_type, "video_refer")
+        self.assertEqual(len(uploaded_paths), 3)
+        self.assertTrue(all(not Path(path).exists() for path in uploaded_paths))
+
+    def test_advanced_element_video_requires_reference(self):
+        with self.assertRaisesRegex(ValueError, "reference_video_input or video_url"):
+            kling_nodes.AdvancedCustomElementCreateNode().create(
+                element_type="video_character", element_name="actor", element_description="Character reference"
+            )
+
     def test_preview_video_returns_local_video_url_when_saved(self):
         self.assertEqual(
             kling_nodes.DEFAULT_VIDEO_FILENAME_PREFIX,
