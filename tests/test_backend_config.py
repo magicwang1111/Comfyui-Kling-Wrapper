@@ -1480,7 +1480,10 @@ class BackendConfigTests(unittest.TestCase):
         def fake_run(generator, client):
             captured["client"] = client
             captured["payload"] = generator.to_dict()
-            return SimpleNamespace(task_id="task-123", final_unit_deduction=1.0)
+            return SimpleNamespace(
+                task_id="task-123", final_unit_deduction=1.0,
+                task_result={"elements": [{"element_id": "element-123"}]},
+            )
 
         with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
             with mock.patch.object(kling_nodes.AdvancedCustomElements, "run", fake_run):
@@ -1523,8 +1526,8 @@ class BackendConfigTests(unittest.TestCase):
             },
         )
         self.assertIs(captured["client"], sentinel_client)
-        self.assertEqual(payload, {"task_id": "task-123"})
-        self.assertEqual(element_id, "")
+        self.assertEqual(payload, {"element_id": "element-123"})
+        self.assertEqual(element_id, "element-123")
         self.assertEqual(json.loads(element_json), payload)
 
     def test_advanced_element_video_subject_sends_minimal_payload(self):
@@ -1538,7 +1541,10 @@ class BackendConfigTests(unittest.TestCase):
         def fake_run(generator, client):
             captured["client"] = client
             captured["payload"] = generator.to_dict()
-            return SimpleNamespace(task_id="task-456", final_unit_deduction=1.0)
+            return SimpleNamespace(
+                task_id="task-456", final_unit_deduction=1.0,
+                task_result={"elements": [{"element_id": "element-456"}]},
+            )
 
         with mock.patch.object(kling_nodes, "_runtime_client", fake_runtime_client):
             with mock.patch.object(kling_nodes.AdvancedCustomElements, "run", fake_run):
@@ -1581,7 +1587,9 @@ class BackendConfigTests(unittest.TestCase):
 
                 def capture(generator, client):
                     captured.update(generator.to_dict())
-                    return SimpleNamespace(task_id="task-123")
+                    return SimpleNamespace(
+                        task_id="task-123", task_result={"elements": [{"element_id": "element-123"}]},
+                    )
 
                 with (
                     mock.patch.object(kling_nodes, "_upload_file_to_temporary_media_host", side_effect=upload),
@@ -1615,6 +1623,47 @@ class BackendConfigTests(unittest.TestCase):
             kling_nodes.AdvancedCustomElementCreateNode().create(
                 element_type="video_character", element_name="actor", element_description="Character reference"
             )
+
+    def test_advanced_element_create_result_feeds_list_builder(self):
+        task_data = {
+            "task_id": "task-123", "task_status": "succeed",
+            "task_result": {"elements": [{"element_id": 123456789, "element_type": "video_character"}]},
+        }
+        with mock.patch.object(kling_nodes, "_runtime_client") as runtime:
+            client = runtime.return_value.__enter__.return_value
+            client.poll_interval = 0
+            client.request.side_effect = [
+                {"data": {"task_id": "task-123"}}, {"data": task_data},
+            ]
+            element, element_id, _ = kling_nodes.AdvancedCustomElementCreateNode().create(
+                element_type="video_character", element_name="actor", element_description="Character reference",
+                video_url="https://example.com/reference.mp4",
+            )
+        self.assertEqual(element_id, "123456789")
+        elements, _ = kling_nodes.ElementListBuilderNode().build(element_1=element)
+        self.assertEqual(elements, [{"element_id": "123456789", "type": "video_character"}])
+
+    def test_advanced_element_create_reports_failed_and_empty_results(self):
+        for status, result, message, expected in (
+            ("failed", {}, "Video duration can not longer than 8s", "Video duration can not longer than 8s"),
+            ("succeed", {}, "", "returned no element_id"),
+            ("succeed", {"elements": [{}]}, "", "returned no element_id"),
+        ):
+            with self.subTest(status=status, result=result):
+                with mock.patch.object(kling_nodes, "_runtime_client") as runtime:
+                    client = runtime.return_value.__enter__.return_value
+                    client.poll_interval = 0
+                    client.request.side_effect = [
+                        {"data": {"task_id": "task-123"}},
+                        {"data": {"task_id": "task-123", "task_status": status,
+                                  "task_status_msg": message, "task_result": result}},
+                    ]
+                    with self.assertRaisesRegex(ValueError, expected) as error:
+                        kling_nodes.AdvancedCustomElementCreateNode().create(
+                            element_type="video_character", element_name="actor",
+                            element_description="Character reference", video_url="https://example.com/reference.mp4",
+                        )
+                    self.assertIn("task-123", str(error.exception))
 
     def test_preview_video_returns_local_video_url_when_saved(self):
         self.assertEqual(

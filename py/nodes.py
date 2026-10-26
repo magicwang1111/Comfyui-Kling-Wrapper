@@ -3610,17 +3610,23 @@ class AdvancedCustomElementCreateNode:
             response = generator.run(client)
         _log_final_unit_deduction(response, "advanced_custom_element_create")
 
-        elements = _extract_elements_from_response(response)
-        if not elements:
-            payload = {"task_id": getattr(response, "task_id", None)}
-            return (
-                payload,
-                "",
-                json.dumps(payload, ensure_ascii=False),
+        task_id = getattr(response, "task_id", None)
+        task_status = getattr(response, "task_status", None)
+        task_status_msg = getattr(response, "task_status_msg", None)
+        if task_status not in (None, "", "succeed", "success", "completed"):
+            raise ValueError(
+                f"Advanced element creation failed (task_id={task_id}, task_status={task_status}): "
+                f"{task_status_msg or 'No failure details returned.'}"
             )
 
-        element_payload = _element_result_to_payload(elements[0])
+        elements = _extract_elements_from_response(response)
+        element_payload = _element_result_to_payload(elements[0]) if elements else {}
         element_id = element_payload.get("element_id") or element_payload.get("id") or ""
+        if not element_id:
+            raise ValueError(
+                f"Advanced element creation returned no element_id (task_id={task_id}): "
+                f"{task_status_msg or 'Query this task ID to check its result.'}"
+            )
         return (
             element_payload,
             element_id,
