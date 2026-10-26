@@ -3476,7 +3476,7 @@ class AdvancedCustomElementCreateNode:
                 "video_url": ("STRING", {"multiline": False, "default": ""}),
                 "element_voice_id": ("STRING", {"multiline": False, "default": ""}),
                 "extra_payload_json": ("STRING", {"multiline": True, "default": ""}),
-                "reference_video_input": ("VIDEO", {"tooltip": "连接 Load Video 上传本地视频。video_character 模式下优先使用此输入，否则使用 video_url。"}),
+                "reference_video_input": ("VIDEO", {"tooltip": "连接 Load Video，主体资产视频不能超过 8 秒；超长将提示更换，不自动截断。video_character 模式下优先使用此输入，否则使用 video_url。"}),
             }
         }
 
@@ -3503,6 +3503,13 @@ class AdvancedCustomElementCreateNode:
         generator = AdvancedCustomElements()
         element_name = (element_name or "").strip()
         element_description = (element_description or "").strip()
+
+        if element_type == "video_character" and reference_video_input is not None:
+            video_duration = reference_video_input.get_duration()
+            if video_duration > 8:
+                raise ValueError(
+                    f"主体资产视频超过 8 秒（当前 {video_duration:.3f} 秒），请上传不超过 8 秒的视频。"
+                )
 
         if element_type in ("image_subject", "multi_image_subject"):
             generator.reference_type = "image_refer"

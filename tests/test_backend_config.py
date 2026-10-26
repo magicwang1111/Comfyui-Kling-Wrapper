@@ -1570,6 +1570,9 @@ class BackendConfigTests(unittest.TestCase):
 
     def test_advanced_element_uploads_local_video_for_all_providers(self):
         class FakeVideo:
+            def get_duration(self):
+                return 8.0
+
             def save_to(self, path):
                 Path(path).write_bytes(b"reference-video")
 
@@ -1617,6 +1620,29 @@ class BackendConfigTests(unittest.TestCase):
                         self.assertEqual(request.reference_type, "video_refer")
         self.assertEqual(len(uploaded_paths), 3)
         self.assertTrue(all(not Path(path).exists() for path in uploaded_paths))
+
+    def test_advanced_element_rejects_long_video_before_upload(self):
+        for duration in (8.001, 12.0):
+            with (
+                self.subTest(duration=duration),
+                mock.patch.object(kling_nodes, "_upload_video_reference") as upload_video,
+                mock.patch.object(kling_nodes, "_upload_image_batch_references") as upload_images,
+                mock.patch.object(kling_nodes, "_runtime_client") as runtime,
+                mock.patch.object(kling_nodes, "_video_provider") as backend,
+            ):
+                video = mock.Mock()
+                video.get_duration.return_value = duration
+                with self.assertRaisesRegex(ValueError, "8"):
+                    kling_nodes.AdvancedCustomElementCreateNode().create(
+                        element_type="video_character", element_name="actor",
+                        element_description="Character reference", reference_video_input=video,
+                        image=object(), image_list=object(),
+                    )
+                upload_video.assert_not_called()
+                upload_images.assert_not_called()
+                runtime.assert_not_called()
+                backend.assert_not_called()
+                video.save_to.assert_not_called()
 
     def test_advanced_element_video_requires_reference(self):
         with self.assertRaisesRegex(ValueError, "reference_video_input or video_url"):
