@@ -154,5 +154,27 @@ class VideoV4Tests(unittest.TestCase):
         self.assertEqual(len(client.calls), 2)
 
 
+    def test_dynamic_ids_preserve_gaps(self):
+        with patch.object(nodes, '_image_batch_to_base64_list', return_value=['img']), patch.object(nodes, '_upload_video_reference', return_value='url'), patch.object(nodes, '_run') as run:
+            nodes.Kling4OmniVideo().generate('ref', image_2=object(), feature_video_3=object(), base_video_url='https://example.com/v.mp4')
+        self.assertEqual([c['id'] for c in run.call_args.args[5]], ['image_2', 'video_1', 'video_4'])
+
+    def test_total_limit_before_upload(self):
+        with patch.object(nodes, '_image_batch_to_base64_list', return_value=['img'] * 10), patch.object(nodes, '_upload_video_reference') as upload, patch.object(nodes, '_run'):
+            with self.assertRaisesRegex(ValueError, '15'):
+                nodes.Kling4OmniVideo().generate('ref', reference_images=object(), feature_video=object(), element_list=[{'element_id': str(i)} for i in range(5)])
+            upload.assert_not_called()
+
+    def test_keyframes_count_towards_image_limit(self):
+        contents = [{'type': 'refer_image', 'url': 'img', 'id': f'image_{i}'} for i in range(10)]
+        contents.append({'type': 'first_frame', 'url': 'img', 'id': 'first_frame'})
+        with self.assertRaisesRegex(ValueError, '10'):
+            api.build_payload('omni', '', '1080p', '10', contents=contents)
+
+    def test_dynamic_socket_rejects_batch(self):
+        with patch.object(nodes, '_image_batch_to_base64_list', return_value=['a', 'b']):
+            with self.assertRaisesRegex(ValueError, 'single image'):
+                nodes.Kling4OmniVideo().generate('ref', image_1=object())
+
 if __name__ == '__main__':
     unittest.main()

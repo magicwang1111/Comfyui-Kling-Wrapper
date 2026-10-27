@@ -28,6 +28,7 @@ It bundles image generation, text-to-video, image-to-video, multi-image video, a
 | 输入 | 提示词引用 |
 |---|---|
 | `reference_images` 图片批次 | `@image_1`、`@image_2`… |
+| 动态 `image_1`、`image_2`…（每口一张） | 与接口名称一致，例如 `@image_2` |
 | `first_frame` 单张首帧 | `@first_frame` |
 | `middle_frames` 中间帧批次 | `@middle_frame_1`、`@middle_frame_2`… |
 | `last_frame` 单张尾帧 | `@last_frame` |
@@ -36,6 +37,10 @@ It bundles image generation, text-to-video, image-to-video, multi-image video, a
 | `custom_voice_list` 音色列表 | `@voice_1`、`@voice_2`… |
 
 参考图与关键帧编号独立。待编辑视频只能选择 `base_video` 或 `base_video_url` 之一；VIDEO 输入沿用现有上传服务，图片通过 base64 发送。素材数量、视频规格等服务端限制以所附 4.0 文档为准。
+
+全能节点现使用与 Seedance 相同的动态连接交互：接上 `image_1` 后自动出现下一个图片口，接上 `feature_video_1` 后自动出现下一个特征视频口。连接口旁显示真实 `@image_N / @video_N` 引用；移除中间图片或特征视频时保留其余接口编号。接入或移除 `base_video`（包括 URL）会改变特征视频的引用偏移，界面会同步提示，请对应检查提示词。`base_video` 存在时固定为 `@video_1`，第一个特征视频为 `@video_2`；不存在时第一个特征视频为 `@video_1`。
+
+旧工作流已经连接的 `reference_images` / `feature_video` 输入仍可使用，新节点不显示这些旧输入。旧图片批次与新动态图片不能同时使用。运行前校验总素材不超过 15，图片（含首中尾帧）不超过 10、视频不超过 5、主体不超过 7、音色不超过 3；视频角色主体占用的视频数量等依赖资产信息的限制仍由服务端校验。前端无法读取上游图片批次及主体/音色列表的实际长度，总数以执行前校验为准。
 
 导入示例：[文生](examples/kling4_text2video.json)、[图生](examples/kling4_image2video.json)、[全能参考](examples/kling4_omnivideo.json)。后两个示例需要在 Load Image 中选择本地图片。离线测试及本地 UI 验证不等同于真实生成成功，实际可用性取决于账号权限与官方服务。
 

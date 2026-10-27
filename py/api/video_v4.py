@@ -12,6 +12,20 @@ FRAME_TYPES = {"first_frame", "middle_frame", "last_frame"}
 CONTENT_TYPES = FRAME_TYPES | {"refer_image", "feature_video", "base_video", "element", "voice"}
 
 
+def validate_material_counts(contents):
+    counts = {
+        "images": sum(c["type"] in FRAME_TYPES | {"refer_image"} for c in contents),
+        "videos": sum(c["type"] in {"base_video", "feature_video"} for c in contents),
+        "elements": sum(c["type"] == "element" for c in contents),
+        "voices": sum(c["type"] == "voice" for c in contents),
+    }
+    if sum(counts.values()) > 15:
+        raise ValueError(f"Kling 4.0 supports at most 15 materials total (including keyframes): {counts}")
+    for name, limit in (("images", 10), ("videos", 5), ("elements", 7), ("voices", 3)):
+        if counts[name] > limit:
+            raise ValueError(f"Kling 4.0 supports at most {limit} {name}; got {counts[name]}.")
+
+
 def build_payload(kind, prompt, resolution, duration, aspect_ratio=None, contents=None,
                   watermark=False, callback_url="", external_task_id=""):
     if kind not in PATHS:
@@ -43,6 +57,7 @@ def build_payload(kind, prompt, resolution, duration, aspect_ratio=None, content
         payload["prompt"] = prompt
         return payload
     contents = list(contents or [])
+    validate_material_counts(contents)
     if kind == "image" and not contents:
         raise ValueError("Image2Video requires at least one keyframe image.")
     ids = set()

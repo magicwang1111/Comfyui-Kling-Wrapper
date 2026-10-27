@@ -1,9 +1,10 @@
 from urllib.parse import urlsplit
+import re
 
 import comfy.model_management
 
 from .api.capabilities import CUSTOM_VOICE_LIST_TYPE, ELEMENT_LIST_TYPE, NODE_CATEGORY
-from .api.video_v4 import build_payload, submit_and_wait
+from .api.video_v4 import build_payload, submit_and_wait, validate_material_counts
 from .nodes import (_image_batch_to_base64_list, _normalize_element_list, _normalize_voice_list,
                     _runtime_client, _upload_video_reference)
 
@@ -109,33 +110,63 @@ class Kling4OmniVideo(Kling4Text2Video):
             "element_list": (ELEMENT_LIST_TYPE, {"tooltip": "现有主体列表：@element_1、@element_2…"}),
             "custom_voice_list": (CUSTOM_VOICE_LIST_TYPE, {"tooltip": "现有音色列表：@voice_1、@voice_2…"}),
         })
+        for index in range(1, 11):
+            inputs["optional"][f"image_{index}"] = ("IMAGE", {"tooltip": f"单张参考图，引用 @image_{index}"})
+        for index in range(1, 6):
+            inputs["optional"][f"feature_video_{index}"] = ("VIDEO", {"tooltip": "参考视频，实际 @video 编号显示在连接口旁。"})
         return inputs
 
     def generate(self, prompt, resolution="1080p", duration="10", aspect_ratio="adaptive",
                  first_frame=None, middle_frames=None, last_frame=None, reference_images=None,
                  base_video=None, base_video_url="", feature_video=None, feature_video_urls="",
-                 element_list=None, custom_voice_list=None, watermark=False, callback_url="", external_task_id=""):
+                 element_list=None, custom_voice_list=None, watermark=False, callback_url="", external_task_id="", **dynamic_inputs):
         if base_video is not None and base_video_url.strip():
             raise ValueError("Provide base_video or base_video_url, not both.")
         urls = [_video_url(line) for line in feature_video_urls.splitlines() if line.strip()]
         base_url = _video_url(base_video_url) if base_video_url.strip() else None
         contents = _frames(first_frame, middle_frames, last_frame)
+        dynamic_images = []
+        dynamic_videos = []
+        for name, value in dynamic_inputs.items():
+            if value is None:
+                continue
+            match = re.fullmatch(r"(image|feature_video)_([1-9]\d*)", name)
+            if not match:
+                raise ValueError(f"Unknown Kling 4.0 input: {name}")
+            kind, index = match[1], int(match[2])
+            if index > (10 if kind == "image" else 5):
+                raise ValueError(f"Kling 4.0 input index out of range: {name}")
+            (dynamic_images if kind == "image" else dynamic_videos).append((index, value))
+        if dynamic_images and reference_images is not None:
+            raise ValueError("Use image_N inputs or legacy reference_images, not both.")
+        for index, image in sorted(dynamic_images):
+            encoded = _image_batch_to_base64_list(image)
+            if len(encoded) != 1:
+                raise ValueError(f"image_{index} requires a single image; connect each reference separately.")
+            contents.append({"type": "refer_image", "url": encoded[0], "id": f"image_{index}"})
         if reference_images is not None:
             for index, value in enumerate(_image_batch_to_base64_list(reference_images), 1):
                 contents.append({"type": "refer_image", "url": value, "id": f"image_{index}"})
         videos = []
-        if base_video is not None:
-            base_url = _upload_video_reference(base_video)
-        if base_url:
-            videos.append(("base_video", base_url))
+        if base_video is not None or base_url:
+            videos.append(("base_video", base_video if base_video is not None else base_url, 1))
+        offset = len(videos)
         if feature_video is not None:
-            videos.append(("feature_video", _upload_video_reference(feature_video)))
-        videos.extend(("feature_video", url) for url in urls)
-        for index, (kind, url) in enumerate(videos, 1):
-            contents.append({"type": kind, "url": url, "id": f"video_{index}"})
+            videos.append(("feature_video", feature_video, offset + 1))
+            offset += 1
+        for index, video in sorted(dynamic_videos):
+            videos.append(("feature_video", video, offset + index))
+        next_index = max((v[2] for v in videos), default=0) + 1
+        videos.extend(("feature_video", url, next_index + i) for i, url in enumerate(urls))
+        for kind, value, index in videos:
+            contents.append({"type": kind, "url": value, "id": f"video_{index}"})
         for index, element in enumerate(_normalize_element_list(element_list) or [], 1):
             contents.append({"type": "element", "element_id": element["element_id"], "id": f"element_{index}"})
         for index, voice in enumerate(_normalize_voice_list(custom_voice_list) or [], 1):
             contents.append({"type": "voice", "voice_id": voice["voice_id"], "id": f"voice_{index}"})
+        validate_material_counts(contents)
+        for item in contents:
+            if item["type"] in {"base_video", "feature_video"} and not isinstance(item["url"], str):
+                item["url"] = _upload_video_reference(item["url"])
         return _run("omni", prompt, resolution, duration, aspect_ratio, contents,
                     watermark=watermark, callback_url=callback_url, external_task_id=external_task_id)

@@ -1,0 +1,657 @@
+{
+  "id": "f951eb1f-89f9-4b65-ab79-62104abf1595",
+  "revision": 0,
+  "last_node_id": 8,
+  "last_link_id": 6,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo",
+      "pos": [
+        700,
+        100
+      ],
+      "size": [
+        460,
+        909
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "first_frame",
+          "name": "first_frame",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "middle_frames",
+          "name": "middle_frames",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "last_frame",
+          "name": "last_frame",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "base_video → @video_1（待编辑）",
+          "localized_name": "base_video",
+          "name": "base_video",
+          "shape": 7,
+          "type": "VIDEO",
+          "link": 3
+        },
+        {
+          "localized_name": "element_list",
+          "name": "element_list",
+          "shape": 7,
+          "type": "COMFYUI_KLING_WRAPPER_ELEMENT_LIST",
+          "link": null
+        },
+        {
+          "localized_name": "custom_voice_list",
+          "name": "custom_voice_list",
+          "shape": 7,
+          "type": "COMFYUI_KLING_WRAPPER_CUSTOM_VOICE_LIST",
+          "link": null
+        },
+        {
+          "label": "image_1 → @image_1",
+          "localized_name": "image_1",
+          "name": "image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 1
+        },
+        {
+          "label": "feature_video_1 → @video_2",
+          "localized_name": "feature_video_1",
+          "name": "feature_video_1",
+          "shape": 7,
+          "type": "VIDEO",
+          "link": 4
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "resolution",
+          "name": "resolution",
+          "type": "COMBO",
+          "widget": {
+            "name": "resolution"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "duration",
+          "name": "duration",
+          "type": "COMBO",
+          "widget": {
+            "name": "duration"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "aspect_ratio",
+          "name": "aspect_ratio",
+          "type": "COMBO",
+          "widget": {
+            "name": "aspect_ratio"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "watermark",
+          "name": "watermark",
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "watermark"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "callback_url",
+          "name": "callback_url",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "callback_url"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "external_task_id",
+          "name": "external_task_id",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "external_task_id"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "base_video_url",
+          "name": "base_video_url",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "base_video_url"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "feature_video_urls",
+          "name": "feature_video_urls",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "feature_video_urls"
+          },
+          "link": null
+        },
+        {
+          "label": "image_2 → @image_2",
+          "name": "image_2",
+          "type": "IMAGE",
+          "link": 2
+        },
+        {
+          "label": "image_3 → @image_3",
+          "name": "image_3",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "feature_video_2 → @video_3",
+          "name": "feature_video_2",
+          "type": "VIDEO",
+          "link": 5
+        },
+        {
+          "label": "feature_video_3 → @video_4",
+          "name": "feature_video_3",
+          "type": "VIDEO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "url",
+          "name": "url",
+          "type": "STRING",
+          "links": [
+            6
+          ]
+        },
+        {
+          "localized_name": "video_id",
+          "name": "video_id",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "动态图片与视频 · 接口旁查看引用号",
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo"
+      },
+      "widgets_values": [
+        "编辑 @video_1：人物外观参考 @image_1，服装参考 @image_2。动作节奏参考 @video_2，运镜方式参考 @video_3。保留原视频场景，确保人物与服装一致。",
+        "1080p",
+        "10",
+        "adaptive",
+        false,
+        "",
+        "",
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "prompt": "编辑 @video_1：人物外观参考 @image_1，服装参考 @image_2。动作节奏参考 @video_2，运镜方式参考 @video_3。保留原视频场景，确保人物与服装一致。",
+        "resolution": "1080p",
+        "duration": "10",
+        "aspect_ratio": "adaptive",
+        "watermark": false,
+        "callback_url": "",
+        "external_task_id": "",
+        "base_video_url": "",
+        "feature_video_urls": ""
+      }
+    },
+    {
+      "id": 2,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        80
+      ],
+      "size": [
+        282.798828125,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "image",
+          "name": "image",
+          "type": "COMBO",
+          "widget": {
+            "name": "image"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "choose file to upload",
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1
+          ]
+        },
+        {
+          "localized_name": "MASK",
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "title": "参考图 @image_1",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "example_reference_1.png",
+        "image"
+      ],
+      "widgets_values_named": {
+        "image": "example_reference_1.png",
+        "upload": "image"
+      }
+    },
+    {
+      "id": 3,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        410
+      ],
+      "size": [
+        282.798828125,
+        314
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "image",
+          "name": "image",
+          "type": "COMBO",
+          "widget": {
+            "name": "image"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "choose file to upload",
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            2
+          ]
+        },
+        {
+          "localized_name": "MASK",
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "title": "参考图 @image_2",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "example_reference_2.png",
+        "image"
+      ],
+      "widgets_values_named": {
+        "image": "example_reference_2.png",
+        "upload": "image"
+      }
+    },
+    {
+      "id": 4,
+      "type": "LoadVideo",
+      "pos": [
+        360,
+        80
+      ],
+      "size": [
+        282.798828125,
+        576.7534722222222
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "file",
+          "name": "file",
+          "type": "COMBO",
+          "widget": {
+            "name": "file"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "choose file to upload",
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "VIDEO",
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "title": "待编辑原视频 @video_1",
+      "properties": {
+        "Node name for S&R": "LoadVideo"
+      },
+      "widgets_values": [
+        "example_source.mp4",
+        "image"
+      ],
+      "widgets_values_named": {
+        "file": "example_source.mp4",
+        "upload": "image"
+      }
+    },
+    {
+      "id": 5,
+      "type": "LoadVideo",
+      "pos": [
+        360,
+        340
+      ],
+      "size": [
+        282.798828125,
+        82
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "file",
+          "name": "file",
+          "type": "COMBO",
+          "widget": {
+            "name": "file"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "choose file to upload",
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "VIDEO",
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "title": "特征视频 @video_2",
+      "properties": {
+        "Node name for S&R": "LoadVideo"
+      },
+      "widgets_values": [
+        "example_feature_1.mp4",
+        "image"
+      ],
+      "widgets_values_named": {
+        "file": "example_feature_1.mp4",
+        "upload": "image"
+      }
+    },
+    {
+      "id": 6,
+      "type": "LoadVideo",
+      "pos": [
+        360,
+        600
+      ],
+      "size": [
+        282.798828125,
+        82
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "file",
+          "name": "file",
+          "type": "COMBO",
+          "widget": {
+            "name": "file"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "choose file to upload",
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "VIDEO",
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "title": "特征视频 @video_3",
+      "properties": {
+        "Node name for S&R": "LoadVideo"
+      },
+      "widgets_values": [
+        "example_feature_2.mp4",
+        "image"
+      ],
+      "widgets_values_named": {
+        "file": "example_feature_2.mp4",
+        "upload": "image"
+      }
+    },
+    {
+      "id": 7,
+      "type": "Comfyui-Kling-Wrapper Preview Video",
+      "pos": [
+        1250,
+        100
+      ],
+      "size": [
+        296.288671875,
+        26
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "video_url",
+          "name": "video_url",
+          "type": "STRING",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "file_path",
+          "name": "file_path",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "生成视频",
+      "properties": {
+        "Node name for S&R": "Comfyui-Kling-Wrapper Preview Video"
+      }
+    },
+    {
+      "id": 8,
+      "type": "Note",
+      "pos": [
+        20,
+        800
+      ],
+      "size": [
+        600,
+        180
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "编号与素材上限",
+      "properties": {},
+      "widgets_values": [
+        "替换两张图片和三个视频后运行。base_video 存在时固定 @video_1，所以两段特征视频分别为 @video_2 / @video_3。移除 base_video 后视频编号会前移，请修改提示词。每个 image_N 只接一张图片。总素材≤15，图片≤10，视频≤5，主体≤7，音色≤3。运行将调用官方计费生成。"
+      ],
+      "widgets_values_named": {
+        "text": "替换两张图片和三个视频后运行。base_video 存在时固定 @video_1，所以两段特征视频分别为 @video_2 / @video_3。移除 base_video 后视频编号会前移，请修改提示词。每个 image_N 只接一张图片。总素材≤15，图片≤10，视频≤5，主体≤7，音色≤3。运行将调用官方计费生成。"
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      1,
+      6,
+      "IMAGE"
+    ],
+    [
+      2,
+      3,
+      0,
+      1,
+      17,
+      "IMAGE"
+    ],
+    [
+      3,
+      4,
+      0,
+      1,
+      3,
+      "VIDEO"
+    ],
+    [
+      4,
+      5,
+      0,
+      1,
+      7,
+      "VIDEO"
+    ],
+    [
+      5,
+      6,
+      0,
+      1,
+      19,
+      "VIDEO"
+    ],
+    [
+      6,
+      1,
+      0,
+      7,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7,
+      "offset": [
+        10,
+        60
+      ]
+    }
+  },
+  "version": 0.4
+}

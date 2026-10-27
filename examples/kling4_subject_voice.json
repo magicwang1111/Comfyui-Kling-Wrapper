@@ -684,11 +684,12 @@
           "link": null
         },
         {
-          "localized_name": "reference_images",
-          "name": "reference_images",
+          "localized_name": "image_1",
+          "name": "image_1",
           "shape": 7,
           "type": "IMAGE",
-          "link": null
+          "link": null,
+          "label": "image_1 → @image_1"
         },
         {
           "localized_name": "base_video",
@@ -698,11 +699,12 @@
           "link": null
         },
         {
-          "localized_name": "feature_video",
-          "name": "feature_video",
+          "localized_name": "feature_video_1",
+          "name": "feature_video_1",
           "shape": 7,
           "type": "VIDEO",
-          "link": null
+          "link": null,
+          "label": "feature_video_1"
         },
         {
           "localized_name": "element_list",

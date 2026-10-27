@@ -79,34 +79,39 @@ export function attachReferencePreview(node, kind) {
     const markers = kind === "OmniVideo"
         ? ["image_1", "video_1", "element_1", "voice_1", "first_frame", "middle_frame_1", "last_frame"]
         : ["first_frame", "middle_frame_1", "last_frame"];
-    for (const marker of markers) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = `@${marker}`;
-        button.title = `在光标处插入 @${marker}，编号可自行修改`;
-        colorToken(button, marker);
-        button.style.cursor = "pointer";
-        button.addEventListener("pointerdown", (event) => event.stopPropagation());
-        button.addEventListener("mousedown", (event) => event.preventDefault());
-        button.addEventListener("click", (event) => {
-            event.stopPropagation();
-            const token = `@${marker} `;
-            if (input) {
-                input.focus();
-                // Native insertText preserves the textarea's undo stack where supported.
-                if (!document.execCommand("insertText", false, token)) {
-                    input.setRangeText(token, input.selectionStart, input.selectionEnd, "end");
-                    input.dispatchEvent(new Event("input", { bubbles: true }));
+    function setReferences(markers, description) {
+        buttons.replaceChildren();
+        if (description) help.textContent = description;
+        for (const marker of markers) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = `@${marker}`;
+            button.title = `在光标处插入 @${marker}，编号可自行修改`;
+            colorToken(button, marker);
+            button.style.cursor = "pointer";
+            button.addEventListener("pointerdown", (event) => event.stopPropagation());
+            button.addEventListener("mousedown", (event) => event.preventDefault());
+            button.addEventListener("click", (event) => {
+                event.stopPropagation();
+                const token = `@${marker} `;
+                if (input) {
+                    input.focus();
+                    // Native insertText preserves the textarea's undo stack where supported.
+                    if (!document.execCommand("insertText", false, token)) {
+                        input.setRangeText(token, input.selectionStart, input.selectionEnd, "end");
+                        input.dispatchEvent(new Event("input", { bubbles: true }));
+                    }
+                    prompt.value = input.value;
+                } else {
+                    prompt.value = String(prompt.value ?? "") + token;
                 }
-                prompt.value = input.value;
-            } else {
-                prompt.value = String(prompt.value ?? "") + token;
-            }
-            prompt.callback?.(prompt.value);
-            node.setDirtyCanvas(true, true);
-        });
-        buttons.append(button);
+                prompt.callback?.(prompt.value);
+                node.setDirtyCanvas(true, true);
+            });
+            buttons.append(button);
+        }
     }
+    setReferences(markers);
     const widget = node.addDOMWidget("kling4_reference_preview", "kling4_preview", root, {
         serialize: false, hideOnZoom: false, getMinHeight: () => 155, getHeight: () => 180,
     });
@@ -115,6 +120,7 @@ export function attachReferencePreview(node, kind) {
     node.widgets.splice(node.widgets.indexOf(prompt) + 1, 0, widget);
     node.kling4ReferencePreview = {
         refresh,
+        setReferences,
         dispose() {
             controller.abort();
             if (prompt.callback === callback) prompt.callback = originalCallback;

@@ -18,10 +18,13 @@ This directory contains importable ComfyUI workflow JSON examples and small Pyth
 | [kling4_subject_voice.json](kling4_subject_voice.json) | 上传素材创建主体与音色，再生成视频 | 同一人物的正面照、另一角度参考照、单人说话音频 |
 | [kling4_video_subject_voice.json](kling4_video_subject_voice.json) | 上传视频创建主体，配指定音色生成视频 | 主体参考视频、单人说话音频 |
 | [kling4_keyframes.json](kling4_keyframes.json) | 首、中、尾帧控制 | 三张关键帧图片 |
+| [kling4_multi_reference.json](kling4_multi_reference.json) | 动态双图＋原视频＋双特征视频 | 两张图片、三段视频 |
 
 4.0 生成节点固定使用官方配置，不受 `provider_default` 影响。**主体配音范例中的创建节点会遵循 `provider_default`，运行前请将其设为 `official`，并配置同一官方账号及素材上传服务。** 在两个 `Load Image` 中上传同一人物的正面照和另一角度参考照，在 `Load Audio` 中上传单人说话音频，修改主体名称、描述及音色名称后运行。也可在 `Load Audio` 中选择支持的视频文件，提取其音轨作为音色参考。工作流会创建主体和音色，经列表节点自动接入全能生成节点，无需手填任务 ID。
 
 图片、视频在对应 Load 节点上传或选择即可。动作参考视频连接 `feature_video`，待编辑原视频连接 `base_video`；两个例子都只有一个视频，因此均引用 `@video_1`。关键帧使用独立引用名，不占用参考图的 `@image_1` 编号。示例已在本地 ComfyUI 中完成导入及 API 参数导出检查，未调用付费生成接口。
+
+全能范例现改用动态 `image_1`、`feature_video_1` 接口，接满一项自动出现下一项。多参考范例包含 `base_video = @video_1`、`feature_video_1 = @video_2`、`feature_video_2 = @video_3`；删除原视频后，需按界面新标签修改提示词中的视频引用。占位图片和视频未替换时，ComfyUI 会提示文件不存在，这是示例的待填写项。
 
 视频主体范例使用 `Load Video → Advanced Element Create.reference_video_input`，已选择 `video_character`。首次使用新增接口前，请重启 ComfyUI 并刷新页面。连接本地视频时会自动上传，优先于 `video_url`；不连接时仍可使用视频 URL。
 
