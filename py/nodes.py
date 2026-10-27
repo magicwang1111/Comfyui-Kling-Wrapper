@@ -48,6 +48,7 @@ import requests
 import torch
 from collections.abc import Iterable
 import folder_paths
+from comfy_api.latest import io as comfy_io
 from comfy_extras.nodes_audio import LoadAudio
 import time
 import urllib.parse
@@ -3785,30 +3786,32 @@ class AdvancedCustomElementDeleteNode:
         return (element_id, request_id)
 
 
-class ElementListBuilderNode:
+class ElementListBuilderNode(comfy_io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "element_1": (ELEMENT_TYPE,),
-            },
-            "optional": {
-                "element_2": (ELEMENT_TYPE,),
-                "element_3": (ELEMENT_TYPE,),
-                "element_4": (ELEMENT_TYPE,),
-                "extra_element_ids": ("STRING", {"multiline": True, "default": ""}),
-            }
-        }
+    def define_schema(cls):
+        return comfy_io.Schema(
+            node_id=f"{NODE_PREFIX} Element List Builder", category=NODE_CATEGORY,
+            inputs=[
+                *[comfy_io.Custom(ELEMENT_TYPE).Input(f"element_{index}", optional=True) for index in range(1, 5)],
+                comfy_io.Autogrow.Input("elements", optional=True, template=comfy_io.Autogrow.TemplateNames(
+                    comfy_io.Custom(ELEMENT_TYPE).Input("element"),
+                    names=[f"element_{index}" for index in range(1, 101)], min=0)),
+                comfy_io.String.Input("extra_element_ids", optional=True, multiline=True, default="",
+                    tooltip="每行一个主体 ID，追加到已连接的主体之后。数量限制由生成节点校验。"),
+            ],
+            outputs=[comfy_io.Custom(ELEMENT_LIST_TYPE).Output(display_name="element_list"),
+                     comfy_io.String.Output(display_name="element_list_json")],
+        )
 
-    RETURN_TYPES = (ELEMENT_LIST_TYPE, "STRING")
-    RETURN_NAMES = ("element_list", "element_list_json")
-    FUNCTION = "build"
-    OUTPUT_NODE = False
-    CATEGORY = NODE_CATEGORY
+    @classmethod
+    def execute(cls, **kwargs):
+        return comfy_io.NodeOutput(*cls().build(**kwargs))
 
-    def build(self, element_1, element_2=None, element_3=None, element_4=None, extra_element_ids=""):
+    def build(self, element_1=None, element_2=None, element_3=None, element_4=None, extra_element_ids="", elements=None):
         element_refs = []
-        for element in (element_1, element_2, element_3, element_4):
+        dynamic_elements = [value for name, value in sorted(
+            (elements or {}).items(), key=lambda item: int(item[0].rsplit("_", 1)[1]))]
+        for element in (element_1, element_2, element_3, element_4, *dynamic_elements):
             if element is not None:
                 element_refs.append(_normalize_element_reference(element, include_metadata=True))
 

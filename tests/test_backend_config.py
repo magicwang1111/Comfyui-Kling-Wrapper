@@ -28,6 +28,7 @@ kling_client = importlib.import_module("py.api.client")
 kling_providers = importlib.import_module("py.api.providers")
 kling_official_provider = importlib.import_module("py.api.providers.official")
 kling_tencent_provider = importlib.import_module("py.api.providers.tencent_vod")
+comfy_io = importlib.import_module("comfy_api.latest._io")
 
 
 OFFICIAL_PROVIDER = kling_providers.OFFICIAL_PROVIDER
@@ -1681,6 +1682,33 @@ class BackendConfigTests(unittest.TestCase):
         elements, encoded = kling_nodes.ElementListBuilderNode().build(element, extra_element_ids="unknown")
         self.assertEqual(elements, [{"element_id": "actor", "type": "video_character", "video_duration": "6"}, {"element_id": "unknown"}])
         self.assertEqual(json.loads(encoded), elements)
+
+    def test_dynamic_element_list_keeps_legacy_order_and_metadata(self):
+        node = kling_nodes.ElementListBuilderNode
+        live = {
+            "element_1": {"element_id": "old1"}, "element_3": {"element_id": "old3"},
+            "elements.element_10": {"element_id": "new10"},
+            "elements.element_2": {"element_id": "new2", "type": "video_character", "video_duration": 6},
+            "extra_element_ids": "manual1, manual2\nmanual3",
+        }
+        valid, _, v3_data = comfy_io.get_finalized_class_inputs(node.INPUT_TYPES(), live)
+        self.assertEqual(valid["optional"]["elements.element_10"][0], kling_capabilities.ELEMENT_TYPE)
+        result = node.execute(**comfy_io.build_nested_inputs(live, v3_data)).result
+        self.assertEqual([e["element_id"] for e in result[0]], ["old1", "old3", "new2", "new10", "manual1", "manual2", "manual3"])
+        self.assertEqual(result[0][2]["video_duration"], 6)
+        self.assertEqual(json.loads(result[1]), result[0])
+        self.assertEqual(tuple(node.RETURN_TYPES), (kling_capabilities.ELEMENT_LIST_TYPE, "STRING"))
+
+    def test_element_list_accepts_legacy_api_and_manual_ids_only(self):
+        node = kling_nodes.ElementListBuilderNode
+        for live, expected in (({"element_1": "old1", "element_4": "old4"}, ["old1", "old4"]),
+                               ({"extra_element_ids": "manual"}, ["manual"])):
+            with self.subTest(live=live):
+                _, _, v3_data = comfy_io.get_finalized_class_inputs(node.INPUT_TYPES(), live)
+                result = node.execute(**comfy_io.build_nested_inputs(live, v3_data)).result
+                self.assertEqual([e["element_id"] for e in result[0]], expected)
+        with self.assertRaisesRegex(ValueError, "At least one element"):
+            node.execute(elements={})
 
     def test_advanced_element_create_reports_failed_and_empty_results(self):
         for status, result, message, expected in (

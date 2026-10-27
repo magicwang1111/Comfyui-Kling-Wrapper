@@ -23,6 +23,7 @@ It bundles image generation, text-to-video, image-to-video, multi-image video, a
 - 负向要求、镜头和声音写入提示词，不提供旧版 `cfg_scale`、`negative_prompt`、`camera_control`、`sound` 控件。
 - 图生及全能节点保留原生提示词文本框，下方同步显示彩色引用预览；点击彩色按钮可在光标处插入引用。预览不是文本框内语法高亮；旧版关键帧别名会在提交时转换为统一 image_N；颜色仅区分素材类型，不代表素材已经连接或验证通过。
 - 全能节点直接接现有 `Element List Builder`、`Custom Voice List Builder` 输出；主体及音色仍须在对应官方账号下可用。无需新建管理或素材构建节点。
+- `Element List Builder` 支持动态主体接口，连接后自动增加下一口，旁边显示 `@element_N`。旧工作流已连接的 `element_1`～`element_4`、输出和手填 ID 均保留；顺序为旧接口→新增动态接口→`extra_element_ids`。升级本身不改变原有主体顺序，增删主体后需核对提示词编号。类型及已知时长继续保留，数量限制由生成节点校验；也可只填写主体 ID。
 - 输出仍为 `url / video_id`，可连接现有 `Preview Video`。任务提交后记录任务 ID；查询失败时保留 ID，便于先查询任务再决定是否重新生成。
 
 | 输入 | 提示词引用 |
