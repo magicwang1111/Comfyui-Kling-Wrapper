@@ -116,10 +116,11 @@
       ],
       "title": "07 首中尾帧控制",
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 Image2Video"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 Image2Video",
+        "kling4UnifiedImageIds": 2
       },
       "widgets_values": [
-        "以 @first_frame 为开始画面，人物缓慢转身，经过 @middle_frame_1 的姿态，最后自然过渡到 @last_frame。保持人物、服装和环境连续，避免突然跳切。",
+        "以 @image_1 为开始画面，人物缓慢转身，经过 @image_2 的姿态，最后自然过渡到 @image_3。保持人物、服装和环境连续，避免突然跳切。",
         "1080p",
         "10",
         false,
@@ -127,7 +128,7 @@
         ""
       ],
       "widgets_values_named": {
-        "prompt": "以 @first_frame 为开始画面，人物缓慢转身，经过 @middle_frame_1 的姿态，最后自然过渡到 @last_frame。保持人物、服装和环境连续，避免突然跳切。",
+        "prompt": "以 @image_1 为开始画面，人物缓慢转身，经过 @image_2 的姿态，最后自然过渡到 @image_3。保持人物、服装和环境连续，避免突然跳切。",
         "resolution": "1080p",
         "duration": "10",
         "watermark": false,
@@ -189,10 +190,10 @@
       "title": "使用说明（运行前阅读）",
       "properties": {},
       "widgets_values": [
-        "分别上传开始、中间、结束三张图片。此例中间帧只有一张；多张时可使用 Image Batch 合并后接 middle_frames，依次引用 @middle_frame_1、@middle_frame_2。\n\n生成节点固定使用官方 Kling 配置。运行会提交真实计费生成任务；先替换所有占位素材。彩色引用只辅助阅读，不代表素材已连接。"
+        "分别上传开始、中间、结束三张图片。此例中间帧只有一张；多张时可使用 Image Batch 合并后接 middle_frames，依次占用 @image_2、@image_3 等编号，尾帧随中间帧张数向后顺延。\n\n生成节点固定使用官方 Kling 配置。运行会提交真实计费生成任务；先替换所有占位素材。彩色引用只辅助阅读，不代表素材已连接。"
       ],
       "widgets_values_named": {
-        "text": "分别上传开始、中间、结束三张图片。此例中间帧只有一张；多张时可使用 Image Batch 合并后接 middle_frames，依次引用 @middle_frame_1、@middle_frame_2。\n\n生成节点固定使用官方 Kling 配置。运行会提交真实计费生成任务；先替换所有占位素材。彩色引用只辅助阅读，不代表素材已连接。"
+        "text": "分别上传开始、中间、结束三张图片。此例中间帧只有一张；多张时可使用 Image Batch 合并后接 middle_frames，依次占用 @image_2、@image_3 等编号，尾帧随中间帧张数向后顺延。\n\n生成节点固定使用官方 Kling 配置。运行会提交真实计费生成任务；先替换所有占位素材。彩色引用只辅助阅读，不代表素材已连接。"
       },
       "color": "#432",
       "bgcolor": "#653"
@@ -247,7 +248,7 @@
           "links": null
         }
       ],
-      "title": "首帧 @first_frame",
+      "title": "首帧 @image_1",
       "properties": {
         "Node name for S&R": "LoadImage"
       },
@@ -310,7 +311,7 @@
           "links": null
         }
       ],
-      "title": "中间帧 @middle_frame_1",
+      "title": "中间帧 @image_2",
       "properties": {
         "Node name for S&R": "LoadImage"
       },
@@ -373,7 +374,7 @@
           "links": null
         }
       ],
-      "title": "尾帧 @last_frame",
+      "title": "尾帧 @image_3",
       "properties": {
         "Node name for S&R": "LoadImage"
       },

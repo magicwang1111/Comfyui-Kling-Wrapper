@@ -182,7 +182,8 @@
       ],
       "title": "04 模特参考视频动作",
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo",
+        "kling4UnifiedImageIds": 2
       },
       "widgets_values": [
         "使用 @image_1 中的人物形象与服装，参考 @video_1 中人物的转身动作和行走节奏。保持 @image_1 的面部、发型和服装细节，背景为简洁的摄影棚，不使用参考视频中的背景。",

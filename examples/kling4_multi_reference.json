@@ -207,7 +207,8 @@
       ],
       "title": "动态图片与视频 · 接口旁查看引用号",
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo",
+        "kling4UnifiedImageIds": 2
       },
       "widgets_values": [
         "编辑 @video_1：人物外观参考 @image_1，服装参考 @image_2。动作节奏参考 @video_2，运镜方式参考 @video_3。保留原视频场景，确保人物与服装一致。",

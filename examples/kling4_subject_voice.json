@@ -825,7 +825,8 @@
       ],
       "title": "06 主体与音色 · 生成视频",
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo",
+        "kling4UnifiedImageIds": 2
       },
       "widgets_values": [
         "@element_1 站在花园里，面向镜头，用 @voice_1 的音色说：“欢迎来到我们的花园。”语气自然温柔，口型与台词同步。保持主体外观一致。",

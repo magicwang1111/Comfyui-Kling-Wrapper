@@ -182,7 +182,8 @@
       ],
       "title": "03 人物图片参考",
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo",
+        "kling4UnifiedImageIds": 2
       },
       "widgets_values": [
         "参考 @image_1 的人物造型，人物缓缓走过花园，保持面部、发型与服装细节一致。自然日光，柔和镜头运动。",

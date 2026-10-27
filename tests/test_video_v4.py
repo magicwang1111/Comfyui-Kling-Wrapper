@@ -157,7 +157,25 @@ class VideoV4Tests(unittest.TestCase):
     def test_dynamic_ids_preserve_gaps(self):
         with patch.object(nodes, '_image_batch_to_base64_list', return_value=['img']), patch.object(nodes, '_upload_video_reference', return_value='url'), patch.object(nodes, '_run') as run:
             nodes.Kling4OmniVideo().generate('ref', image_2=object(), feature_video_3=object(), base_video_url='https://example.com/v.mp4')
-        self.assertEqual([c['id'] for c in run.call_args.args[5]], ['image_2', 'video_1', 'video_4'])
+        self.assertEqual([c['id'] for c in run.call_args.args[5]], ['image_1', 'video_1', 'video_4'])
+
+    def test_unified_images_include_all_keyframes_and_references(self):
+        with patch.object(nodes, '_image_batch_to_base64_list', side_effect=[['first'], ['mid1', 'mid2'], ['last'], ['ref']]), patch.object(nodes, '_run') as run:
+            nodes.Kling4OmniVideo().generate('@image_1 到 @image_5', first_frame=object(), middle_frames=object(), last_frame=object(), image_3=object())
+        contents = run.call_args.args[5]
+        self.assertEqual([c['id'] for c in contents], ['image_1', 'image_2', 'image_3', 'image_4', 'image_5'])
+        self.assertEqual([c['url'] for c in contents], ['first', 'mid1', 'mid2', 'last', 'ref'])
+
+    def test_legacy_frame_aliases_and_reference_ids_convert_simultaneously(self):
+        with patch.object(nodes, '_image_batch_to_base64_list', side_effect=[['first'], ['ref']]), patch.object(nodes, '_run') as run:
+            nodes.Kling4OmniVideo().generate('@first_frame的人穿@image_1的衣服', first_frame=object(), image_1=object())
+        self.assertEqual(run.call_args.args[1], '@image_1的人穿@image_2的衣服')
+
+    def test_image_node_uses_unified_frame_ids(self):
+        with patch.object(nodes, '_image_batch_to_base64_list', side_effect=[['first'], ['mid'], ['last']]), patch.object(nodes, '_run') as run:
+            nodes.Kling4Image2Video().generate('@first_frame 到 @middle_frame_1 到 @last_frame', first_frame=object(), middle_frames=object(), last_frame=object())
+        self.assertEqual(run.call_args.kwargs['contents'][2]['id'], 'image_3')
+        self.assertEqual(run.call_args.args[1], '@image_1 到 @image_2 到 @image_3')
 
     def test_total_limit_before_upload(self):
         with patch.object(nodes, '_image_batch_to_base64_list', return_value=['img'] * 10), patch.object(nodes, '_upload_video_reference') as upload, patch.object(nodes, '_run'):

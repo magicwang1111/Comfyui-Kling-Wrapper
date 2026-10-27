@@ -116,10 +116,11 @@
       ],
       "title": "02 单图动起来",
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 Image2Video"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 Image2Video",
+        "kling4UnifiedImageIds": 2
       },
       "widgets_values": [
-        "以 @first_frame 为首帧，人物自然转头看向镜头，然后微笑。镜头缓慢推进，保持人物面部与服装一致。",
+        "以 @image_1 为首帧，人物自然转头看向镜头，然后微笑。镜头缓慢推进，保持人物面部与服装一致。",
         "1080p",
         "10",
         false,
@@ -127,7 +128,7 @@
         ""
       ],
       "widgets_values_named": {
-        "prompt": "以 @first_frame 为首帧，人物自然转头看向镜头，然后微笑。镜头缓慢推进，保持人物面部与服装一致。",
+        "prompt": "以 @image_1 为首帧，人物自然转头看向镜头，然后微笑。镜头缓慢推进，保持人物面部与服装一致。",
         "resolution": "1080p",
         "duration": "10",
         "watermark": false,
@@ -189,10 +190,10 @@
       "title": "使用说明（运行前阅读）",
       "properties": {},
       "widgets_values": [
-        "在首帧 Load Image 中上传自己的图片；@first_frame 对应该图片。\n\n生成节点固定使用官方 Kling 配置。运行会提交真实计费生成任务；先替换所有占位素材。彩色引用只辅助阅读，不代表素材已连接。"
+        "在首帧 Load Image 中上传自己的图片；@image_1 对应该图片。\n\n生成节点固定使用官方 Kling 配置。运行会提交真实计费生成任务；先替换所有占位素材。彩色引用只辅助阅读，不代表素材已连接。"
       ],
       "widgets_values_named": {
-        "text": "在首帧 Load Image 中上传自己的图片；@first_frame 对应该图片。\n\n生成节点固定使用官方 Kling 配置。运行会提交真实计费生成任务；先替换所有占位素材。彩色引用只辅助阅读，不代表素材已连接。"
+        "text": "在首帧 Load Image 中上传自己的图片；@image_1 对应该图片。\n\n生成节点固定使用官方 Kling 配置。运行会提交真实计费生成任务；先替换所有占位素材。彩色引用只辅助阅读，不代表素材已连接。"
       },
       "color": "#432",
       "bgcolor": "#653"

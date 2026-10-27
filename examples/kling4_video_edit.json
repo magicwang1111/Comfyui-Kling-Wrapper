@@ -182,7 +182,8 @@
       ],
       "title": "05 修改原视频服装",
       "properties": {
-        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo"
+        "Node name for S&R": "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo",
+        "kling4UnifiedImageIds": 2
       },
       "widgets_values": [
         "编辑 @video_1，将人物的服装替换为 @image_1 中的服装。保持原视频的人物面部、动作、镜头运动和背景不变，保留参考服装的颜色、纹理与版型。",

@@ -26,9 +26,9 @@ def _common_inputs():
 
 def _frame_inputs():
     return {
-        "first_frame": ("IMAGE", {"tooltip": "单张首帧，引用 @first_frame"}),
-        "middle_frames": ("IMAGE", {"tooltip": "中间帧批次，引用 @middle_frame_1、@middle_frame_2…"}),
-        "last_frame": ("IMAGE", {"tooltip": "单张尾帧，引用 @last_frame"}),
+        "first_frame": ("IMAGE", {"tooltip": "单张首帧，所有图片按首帧→中间帧→尾帧→参考图统一编号。"}),
+        "middle_frames": ("IMAGE", {"tooltip": "中间帧批次，每张占用一个 image_N 编号；接在首帧之后。"}),
+        "last_frame": ("IMAGE", {"tooltip": "单张尾帧，接在所有中间帧之后编号。"}),
     }
 
 
@@ -52,6 +52,24 @@ def _video_url(value):
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("Video references must be HTTP(S) URLs, or connect a VIDEO input.")
     return value
+
+
+def _unify_image_ids(prompt, contents):
+    aliases = {}
+    result = []
+    for item in contents:
+        if item["type"] in {"first_frame", "middle_frame", "last_frame", "refer_image"}:
+            new_id = f"image_{len(aliases) + 1}"
+            aliases[item["id"]] = new_id
+            item = {**item, "id": new_id}
+        result.append(item)
+    # A named keyframe marker identifies the legacy namespace. Replace once,
+    # including its old reference-image IDs, so substitutions cannot cascade.
+    pattern = r"@(first_frame|middle_frame_[1-9]\d*|last_frame|image_[1-9]\d*)(?![A-Za-z0-9_])"
+    tokens = re.findall(pattern, prompt or "")
+    if any(name in aliases and not name.startswith("image_") for name in tokens):
+        prompt = re.sub(pattern, lambda m: "@" + aliases.get(m[1], m[1]), prompt)
+    return prompt, result
 
 
 def _run(kind, prompt, resolution, duration, aspect_ratio=None, contents=None, **options):
@@ -90,8 +108,9 @@ class Kling4Image2Video(Kling4Text2Video):
 
     def generate(self, prompt, resolution="1080p", duration="10", first_frame=None,
                  middle_frames=None, last_frame=None, watermark=False, callback_url="", external_task_id=""):
+        prompt, contents = _unify_image_ids(prompt, _frames(first_frame, middle_frames, last_frame))
         return _run("image", prompt, resolution, duration,
-                    contents=_frames(first_frame, middle_frames, last_frame),
+                    contents=contents,
                     watermark=watermark, callback_url=callback_url, external_task_id=external_task_id)
 
 
@@ -102,7 +121,7 @@ class Kling4OmniVideo(Kling4Text2Video):
         inputs["required"]["aspect_ratio"] = (["adaptive", "21:9", "16:9", "9:16", "1:1"], {"default": "adaptive"})
         inputs["optional"].update(_frame_inputs())
         inputs["optional"].update({
-            "reference_images": ("IMAGE", {"tooltip": "参考图片批次：@image_1、@image_2…；关键帧不占用这些编号。"}),
+            "reference_images": ("IMAGE", {"tooltip": "旧参考图片批次，接在关键帧之后统一分配 image_N。"}),
             "base_video": ("VIDEO", {"tooltip": "待编辑视频；有此输入时为 @video_1。与 base_video_url 二选一。"}),
             "base_video_url": ("STRING", {"default": ""}),
             "feature_video": ("VIDEO", {"tooltip": "特征参考视频；接在 base_video 后编号，无 base_video 时为 @video_1。"}),
@@ -111,7 +130,7 @@ class Kling4OmniVideo(Kling4Text2Video):
             "custom_voice_list": (CUSTOM_VOICE_LIST_TYPE, {"tooltip": "现有音色列表：@voice_1、@voice_2…"}),
         })
         for index in range(1, 11):
-            inputs["optional"][f"image_{index}"] = ("IMAGE", {"tooltip": f"单张参考图，引用 @image_{index}"})
+            inputs["optional"][f"image_{index}"] = ("IMAGE", {"tooltip": "单张参考图；引用编号在所有关键帧之后，查看接口旁标签。"})
         for index in range(1, 6):
             inputs["optional"][f"feature_video_{index}"] = ("VIDEO", {"tooltip": "参考视频，实际 @video 编号显示在连接口旁。"})
         return inputs
@@ -165,6 +184,7 @@ class Kling4OmniVideo(Kling4Text2Video):
         for index, voice in enumerate(_normalize_voice_list(custom_voice_list) or [], 1):
             contents.append({"type": "voice", "voice_id": voice["voice_id"], "id": f"voice_{index}"})
         validate_material_counts(contents)
+        prompt, contents = _unify_image_ids(prompt, contents)
         for item in contents:
             if item["type"] in {"base_video", "feature_video"} and not isinstance(item["url"], str):
                 item["url"] = _upload_video_reference(item["url"])

@@ -1,4 +1,5 @@
 import { app } from "../../../scripts/app.js";
+import { updateImageReferences, IMAGE_ORDER_HELP, legacyImageWarning } from "./kling4ImageReferences.js";
 
 const NODE = "Comfyui-Kling-Wrapper Kling 4.0 OmniVideo";
 
@@ -39,11 +40,13 @@ export function stabilizeInputs(node) {
         if (baseInput) baseInput.label = "base_video → @video_1（接入时占用）";
         const legacy = node.inputs.find(i => i.name === "feature_video");
         if (legacy) legacy.label = `feature_video → @video_${base ? 2 : 1}（旧输入）`;
-        const markers = node.inputs.filter(i => i.kling4Reference).map(i => i.kling4Reference);
+        const images = updateImageReferences(node);
+        const markers = [...images.markers, ...node.inputs.filter(i => i.name.startsWith("feature_video_") && i.kling4Reference).map(i => i.kling4Reference)];
+        if (!images.markers.length && !images.uncertain) markers.unshift("image_1");
         if (base || legacyVideo) markers.push("video_1");
         if (base && legacyVideo) markers.push("video_2");
-        node.kling4ReferencePreview?.setReferences([...new Set([...markers, "element_1", "voice_1", "first_frame", "middle_frame_1", "last_frame"])],
-            `${base ? "base_video = @video_1；特征视频引用号已后移。" : "未提供 base_video；特征视频从 @video_1 开始。"} 增删 base_video 会改变视频引用号，请检查提示词。总素材≤15（含关键帧、主体和音色），执行前按实际数量校验。`);
+        node.kling4ReferencePreview?.setReferences([...new Set([...markers, "element_1", "voice_1"])],
+            `${IMAGE_ORDER_HELP} ${images.uncertain ? "上游批次张数未知，后续图片编号将在执行时确定。" : ""} ${base ? "base_video = @video_1；特征视频引用号已后移。" : "未提供 base_video；特征视频从 @video_1 开始。"} 总素材≤15，执行前按实际数量校验。${legacyImageWarning(node)}`);
     } finally {
         node.kling4Stabilizing = false;
     }
@@ -68,6 +71,7 @@ app.registerExtension({
                 const result = original?.apply(this, arguments);
                 schedule(this);
                 if (event === "onNodeCreated") {
+                    this.kling4RefreshReferences = () => schedule(this);
                     const widget = this.widgets?.find(w => w.name === "base_video_url");
                     if (widget) {
                         const callback = widget.callback;

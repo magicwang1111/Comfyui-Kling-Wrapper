@@ -1,4 +1,5 @@
 import { app } from "../../../scripts/app.js";
+import { updateImageReferences, IMAGE_ORDER_HELP, legacyImageWarning } from "./kling4ImageReferences.js";
 
 const PREFIX = "Comfyui-Kling-Wrapper Kling 4.0 ";
 const COLORS = {
@@ -46,7 +47,7 @@ export function attachReferencePreview(node, kind) {
         width: "100%", height: "100%", overflow: "auto",
     });
     const title = document.createElement("div");
-    title.textContent = "引用预览 · 彩色标记仅辅助阅读，实际提交原始提示词";
+    title.textContent = "引用预览 · 旧关键帧别名在提交时兼容转换为 image_N";
     title.style.color = "#aab8cb";
     const buttons = document.createElement("div");
     Object.assign(buttons.style, { display: "flex", flexWrap: "wrap", gap: "5px", margin: "6px 0" });
@@ -55,9 +56,7 @@ export function attachReferencePreview(node, kind) {
     const help = document.createElement("div");
     help.style.color = "#aab8cb";
     help.style.fontSize = "11px";
-    help.textContent = kind === "OmniVideo"
-        ? "图片按参考图批次编号；视频按待编辑→特征 VIDEO→URL 列表编号；主体/音色按列表编号。点击标签插入，须连接对应素材。"
-        : "首尾帧各一张，中间帧按批次编号。点击标签插入，须连接对应素材。";
+    help.textContent = IMAGE_ORDER_HELP;
     root.append(title, buttons, preview, help);
 
     const refresh = () => renderReferences(preview, String(prompt.value ?? ""));
@@ -77,9 +76,12 @@ export function attachReferencePreview(node, kind) {
     prompt.callback = callback;
 
     const markers = kind === "OmniVideo"
-        ? ["image_1", "video_1", "element_1", "voice_1", "first_frame", "middle_frame_1", "last_frame"]
-        : ["first_frame", "middle_frame_1", "last_frame"];
+        ? ["image_1", "video_1", "element_1", "voice_1"]
+        : ["image_1"];
     function setReferences(markers, description) {
+        const signature = JSON.stringify([markers, description]);
+        if (root.dataset.referenceSignature === signature) return;
+        root.dataset.referenceSignature = signature;
         buttons.replaceChildren();
         if (description) help.textContent = description;
         for (const marker of markers) {
@@ -140,15 +142,40 @@ app.registerExtension({
         const created = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const result = created?.apply(this, arguments);
+            this.properties.kling4UnifiedImageIds = 2;
             attachReferencePreview(this, kind);
+            if (kind === "Image2Video") refreshImageLabels(this);
+            return result;
+        };
+        const draw = nodeType.prototype.onDrawBackground;
+        nodeType.prototype.onDrawBackground = function () {
+            const result = draw?.apply(this, arguments);
+            // Upstream ImageBatch changes do not change this node's own links.
+            const images = updateImageReferences(this);
+            const signature = JSON.stringify(images);
+            if (signature !== this.kling4ImageSignature) {
+                this.kling4ImageSignature = signature;
+                if (kind === "Image2Video") refreshImageLabels(this);
+                else this.kling4RefreshReferences?.();
+            }
             return result;
         };
         const configured = nodeType.prototype.onConfigure;
         nodeType.prototype.onConfigure = function () {
             const result = configured?.apply(this, arguments);
+            this.properties.kling4UnifiedImageIds = arguments[0]?.properties?.kling4UnifiedImageIds || 1;
             this.kling4ReferencePreview?.refresh();
+            if (kind === "Image2Video") refreshImageLabels(this);
             return result;
         };
+        if (kind === "Image2Video") {
+            const connections = nodeType.prototype.onConnectionsChange;
+            nodeType.prototype.onConnectionsChange = function () {
+                const result = connections?.apply(this, arguments);
+                refreshImageLabels(this);
+                return result;
+            };
+        }
         const removed = nodeType.prototype.onRemoved;
         nodeType.prototype.onRemoved = function () {
             this.kling4ReferencePreview?.dispose();
@@ -156,3 +183,10 @@ app.registerExtension({
         };
     },
 });
+
+function refreshImageLabels(node) {
+    const images = updateImageReferences(node);
+    node.kling4ReferencePreview?.setReferences(images.markers.length ? images.markers : images.uncertain ? [] : ["image_1"],
+        IMAGE_ORDER_HELP + (images.uncertain ? " 上游批次张数未知，后续编号执行时确定。" : "") + legacyImageWarning(node));
+    node.graph?.setDirtyCanvas(true, true);
+}
