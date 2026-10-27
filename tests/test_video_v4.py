@@ -1,9 +1,12 @@
 import importlib
 import sys
+import tempfile
 import unittest
 from contextlib import contextmanager
+from fractions import Fraction
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 for path in (ROOT.parent.parent, ROOT):
@@ -166,7 +169,7 @@ class VideoV4Tests(unittest.TestCase):
         self.assertEqual(api.submit_and_wait(client, 'image', {}).url, 'correct')
 
     def test_rejects_conflicting_or_local_video_source_before_upload(self):
-        with patch.object(nodes, '_upload_video_reference') as upload:
+        with patch.object(nodes, '_upload_videos') as upload:
             with self.assertRaisesRegex(ValueError, 'not both'):
                 nodes.Kling4OmniVideo().generate('edit', base_video=object(), base_video_url='https://example.com/v.mp4')
             with self.assertRaisesRegex(ValueError, 'HTTP'):
@@ -187,7 +190,7 @@ class VideoV4Tests(unittest.TestCase):
 
 
     def test_dynamic_ids_preserve_gaps(self):
-        with patch.object(nodes, '_image_batch_to_base64_list', return_value=['img']), patch.object(nodes, '_upload_video_reference', return_value='url'), patch.object(nodes, '_run') as run:
+        with patch.object(nodes, '_image_batch_to_base64_list', return_value=['img']), patch.object(nodes, '_upload_videos'), patch.object(nodes, '_run') as run:
             nodes.Kling4OmniVideo().generate('ref', image_2=object(), feature_video_3=object(), base_video_url='https://example.com/v.mp4')
         self.assertEqual([c['id'] for c in run.call_args.args[5]], ['image_1', 'video_1', 'video_4'])
 
@@ -210,7 +213,7 @@ class VideoV4Tests(unittest.TestCase):
         self.assertEqual(run.call_args.args[1], '@image_1 到 @image_2 到 @image_3')
 
     def test_total_limit_before_upload(self):
-        with patch.object(nodes, '_image_batch_to_base64_list', return_value=['img'] * 10), patch.object(nodes, '_upload_video_reference') as upload, patch.object(nodes, '_run'):
+        with patch.object(nodes, '_image_batch_to_base64_list', return_value=['img'] * 10), patch.object(nodes, '_upload_videos') as upload, patch.object(nodes, '_run'):
             with self.assertRaisesRegex(ValueError, '15'):
                 nodes.Kling4OmniVideo().generate('ref', reference_images=object(), feature_video=object(), element_list=[{'element_id': str(i)} for i in range(5)])
             upload.assert_not_called()
@@ -225,6 +228,127 @@ class VideoV4Tests(unittest.TestCase):
         with patch.object(nodes, '_image_batch_to_base64_list', return_value=['a', 'b']):
             with self.assertRaisesRegex(ValueError, 'single image'):
                 nodes.Kling4OmniVideo().generate('ref', image_1=object())
+
+    def test_video_character_limits_before_preparing_or_uploading(self):
+        for characters, references, message in ((4, 0, '3 video'), (3, 3, '5 reference')):
+            with self.subTest(characters=characters), patch.object(nodes, '_upload_videos') as upload:
+                elements = [{'element_id': str(i), 'reference_type': 'video_refer'} for i in range(characters)]
+                with self.assertRaisesRegex(ValueError, message):
+                    nodes.Kling4OmniVideo().generate('test', element_list=elements,
+                        feature_video_urls='\n'.join(f'https://example.com/{i}.mp4' for i in range(references)))
+                upload.assert_not_called()
+        with self.assertRaisesRegex(ValueError, '1 base_video'):
+            api.build_payload('omni', 'test', '1080p', '10', contents=[
+                {'type': 'base_video', 'id': f'video_{i}', 'url': 'https://example.com/v.mp4'} for i in range(2)])
+
+    def test_video_metadata_limits_and_inclusive_boundaries(self):
+        valid = {'size': api.MAX_VIDEO_BYTES, 'format': 'mov,mp4,m4a,3gp,3g2,mj2',
+                 'duration': 3, 'width': 3840, 'height': 2160, 'fps': 24}
+        api.validate_video_metadata(valid, 'video_1')
+        api.validate_video_metadata({**valid, 'duration': 30, 'fps': 60}, 'video_1')
+        for changes, message in (({'size': api.MAX_VIDEO_BYTES + 1}, '300 MB'),
+                                 ({'format': 'matroska,webm'}, 'MP4 or MOV'),
+                                 ({'duration': 2.99}, '3–30 seconds'), ({'duration': 30.01}, '3–30 seconds'),
+                                 ({'width': 699}, '700–4553'), ({'height': 4554}, '700–4553'),
+                                 ({'width': 3841}, '8294400'),
+                                 ({'width': 1800, 'height': 700}, '2:5'),
+                                 ({'width': 700, 'height': 1800}, '2:5'),
+                                 ({'fps': 23.976}, '24–60'), ({'fps': 61}, '24–60')):
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, 'video_2:.*' + message):
+                api.validate_video_metadata({**valid, **changes}, 'video_2')
+        for width, height in ((700, 1750), (1750, 700), (4552, 1821), (1821, 4552), (4553, None)):
+            api.validate_video_metadata({'width': width, 'height': height}, 'video_1')
+
+    def test_unknown_duration_never_becomes_zero_or_assumed_valid_total(self):
+        for value in (None, '', 'unknown', 'nan', 'inf', 0, -1):
+            self.assertIsNone(api.known_duration(value))
+        for durations in ([], [None], [2, None], [3], [15, 15]):
+            api.validate_video_duration_total(durations)
+        for durations in ([2], [16, 15], [16, 15, None]):
+            with self.assertRaisesRegex(ValueError, 'total video duration'):
+                api.validate_video_duration_total(durations)
+        api.validate_video_metadata({'duration': None, 'fps': None, 'width': 0, 'height': 0}, 'video_1')
+
+    def test_metadata_probe_never_decodes_or_counts_frames(self):
+        stream = SimpleNamespace(width=1920, height=1080, average_rate=Fraction(30),
+                                 duration=90, time_base=Fraction(1, 30), frames=90)
+        with patch.object(api.os.path, 'getsize', return_value=1024), patch.object(api.av, 'open') as open_video:
+            container = open_video.return_value.__enter__.return_value
+            container.format.name = 'mov,mp4,m4a,3gp,3g2,mj2'
+            container.streams.video = [stream]
+            container.duration = None
+            container.decode.side_effect = AssertionError('must not decode')
+            container.demux.side_effect = AssertionError('must not scan packets')
+            self.assertEqual(api.read_video_metadata('local.mp4')['duration'], 3)
+            stream.duration = None
+            self.assertEqual(api.read_video_metadata('local.mp4')['duration'], 3)
+            stream.frames = 0
+            stream.average_rate = None
+            metadata = api.read_video_metadata('local.mp4')
+            self.assertIsNone(metadata['duration'])
+            self.assertNotIn('fps', metadata)
+            container.decode.assert_not_called()
+            container.demux.assert_not_called()
+        with patch.object(api.os.path, 'getsize', return_value=api.MAX_VIDEO_BYTES + 1), patch.object(api.av, 'open') as open_video:
+            self.assertEqual(api.read_video_metadata('large.mp4'), {'size': api.MAX_VIDEO_BYTES + 1})
+            open_video.assert_not_called()
+
+    def test_all_local_videos_checked_before_any_upload_and_temp_files_cleaned(self):
+        saved = []
+        def save(path):
+            saved.append(path)
+            Path(path).write_bytes(b'video')
+        videos = [Mock(save_to=Mock(side_effect=save)) for _ in range(2)]
+        for durations, elements, message in (([10, 2], [], 'input video duration'),
+                ([15, 15], [{'element_id': 'actor', 'type': 'video_character', 'video_duration': '3'}], 'total video duration')):
+            with self.subTest(durations=durations), patch.object(nodes, 'read_video_metadata', side_effect=[{'duration': d} for d in durations]), \
+                 patch.object(nodes, '_upload_file_to_temporary_media_host') as upload, patch.object(nodes, '_run') as run:
+                with self.assertRaisesRegex(ValueError, message):
+                    nodes.Kling4OmniVideo().generate('test', feature_video_1=videos[0], feature_video_2=videos[1], element_list=elements)
+                upload.assert_not_called()
+                run.assert_not_called()
+                self.assertTrue(all(not Path(path).exists() for path in saved))
+
+    def test_remote_urls_are_not_probed_and_metadata_is_not_sent(self):
+        with patch.object(nodes, 'read_video_metadata') as probe, patch.object(nodes, '_upload_file_to_temporary_media_host') as upload, patch.object(nodes, '_run') as run:
+            nodes.Kling4OmniVideo().generate('test', base_video_url='https://example.com/signed?token=test',
+                element_list=[{'element_id': 'actor', 'reference_type': 'video_refer', 'duration': '8'}, {'element_id': 'unknown'}])
+            probe.assert_not_called()
+            upload.assert_not_called()
+        self.assertEqual(run.call_args.args[5][1], {'type': 'element', 'element_id': 'actor', 'id': 'element_1'})
+
+    def test_real_mp4_header_and_single_save_per_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = str(Path(directory) / 'source.mp4')
+            with api.av.open(source, 'w') as output:
+                stream = output.add_stream('libx264', rate=24)
+                stream.width = stream.height = 700
+                stream.pix_fmt = 'yuv420p'
+                stream.options = {'preset': 'ultrafast'}
+                frame = api.av.VideoFrame(700, 700, 'yuv420p')
+                for plane in frame.planes:
+                    plane.update(bytes(plane.buffer_size))
+                for index in range(72):
+                    frame.pts = index
+                    frame.time_base = Fraction(1, 24)
+                    for packet in stream.encode(frame):
+                        output.mux(packet)
+                for packet in stream.encode():
+                    output.mux(packet)
+            metadata = api.read_video_metadata(source)
+            self.assertEqual((metadata['width'], metadata['height'], metadata['duration'], metadata['fps']), (700, 700, 3, 24))
+            video = Mock()
+            video.save_to.side_effect = lambda path: Path(path).write_bytes(Path(source).read_bytes())
+            video.get_components.side_effect = AssertionError('must not materialize frames')
+            video.get_duration.side_effect = AssertionError('must not use decoding fallback')
+            with patch.object(nodes, '_upload_file_to_temporary_media_host', return_value='https://example.com/upload.mp4') as upload, patch.object(nodes, '_run') as run:
+                nodes.Kling4OmniVideo().generate('test', feature_video_1=video)
+            video.save_to.assert_called_once()
+            upload.assert_called_once()
+            video.get_components.assert_not_called()
+            video.get_duration.assert_not_called()
+            self.assertFalse(Path(upload.call_args.args[0]).exists())
+            self.assertEqual(run.call_args.args[5][0]['url'], 'https://example.com/upload.mp4')
 
 if __name__ == '__main__':
     unittest.main()

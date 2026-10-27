@@ -1526,7 +1526,7 @@ class BackendConfigTests(unittest.TestCase):
             },
         )
         self.assertIs(captured["client"], sentinel_client)
-        self.assertEqual(payload, {"element_id": "element-123"})
+        self.assertEqual(payload, {"element_id": "element-123", "reference_type": "image_refer"})
         self.assertEqual(element_id, "element-123")
         self.assertEqual(json.loads(element_json), payload)
 
@@ -1603,7 +1603,7 @@ class BackendConfigTests(unittest.TestCase):
                     backend.return_value.__enter__.return_value.create_element.return_value = SimpleNamespace(
                         element={"element_id": "element-123"}, element_id="element-123"
                     )
-                    kling_nodes.AdvancedCustomElementCreateNode().create(
+                    element, _, _ = kling_nodes.AdvancedCustomElementCreateNode().create(
                         element_type="video_character",
                         element_name="actor",
                         element_description="Character reference",
@@ -1611,6 +1611,9 @@ class BackendConfigTests(unittest.TestCase):
                         reference_video_input=FakeVideo(),
                         video_url="https://example.com/unused.mp4",
                     )
+                    elements, _ = kling_nodes.ElementListBuilderNode().build(element)
+                    self.assertEqual(elements, [{"element_id": "element-123", "type": "video_character", "video_duration": 8.0}])
+                    self.assertEqual(kling_nodes._normalize_element_list(elements), [{"element_id": "element-123", "type": "video_character"}])
                     if provider == OFFICIAL_PROVIDER:
                         self.assertEqual(captured["element_video_list"], expected)
                         self.assertEqual(captured["reference_type"], "video_refer")
@@ -1653,7 +1656,7 @@ class BackendConfigTests(unittest.TestCase):
     def test_advanced_element_create_result_feeds_list_builder(self):
         task_data = {
             "task_id": "task-123", "task_status": "succeed",
-            "task_result": {"elements": [{"element_id": 123456789, "element_type": "video_character"}]},
+            "task_result": {"elements": [{"element_id": 123456789, "element_type": "video_character", "video_duration": 7.5}]},
         }
         with mock.patch.object(kling_nodes, "_runtime_client") as runtime:
             client = runtime.return_value.__enter__.return_value
@@ -1667,7 +1670,17 @@ class BackendConfigTests(unittest.TestCase):
             )
         self.assertEqual(element_id, "123456789")
         elements, _ = kling_nodes.ElementListBuilderNode().build(element_1=element)
-        self.assertEqual(elements, [{"element_id": "123456789", "type": "video_character"}])
+        self.assertEqual(elements, [{"element_id": "123456789", "type": "video_character", "video_duration": "7.5"}])
+
+    def test_element_query_preserves_metadata_without_extra_requests(self):
+        with mock.patch.object(kling_nodes, "_runtime_client") as runtime:
+            client = runtime.return_value.__enter__.return_value
+            client.request.return_value = {"data": {"element_id": "actor", "reference_type": "video_refer", "duration": "6"}}
+            element, _, _ = kling_nodes.AdvancedCustomElementQueryNode().query("element_id", "actor")
+        client.request.assert_called_once()
+        elements, encoded = kling_nodes.ElementListBuilderNode().build(element, extra_element_ids="unknown")
+        self.assertEqual(elements, [{"element_id": "actor", "type": "video_character", "video_duration": "6"}, {"element_id": "unknown"}])
+        self.assertEqual(json.loads(encoded), elements)
 
     def test_advanced_element_create_reports_failed_and_empty_results(self):
         for status, result, message, expected in (

@@ -255,6 +255,9 @@ class ElementPredictionResponse(BaseModel):
             name: str = None
             type: str = None
             element_type: str = None
+            reference_type: str = None
+            duration: str = None
+            video_duration: str = None
             status: str = None
             style: str = None
             element_voice_id: str = None

@@ -1,13 +1,17 @@
 from urllib.parse import urlsplit
+from pathlib import Path
 import re
+import tempfile
 
 import comfy.model_management
 from comfy_api.latest import io
 
 from .api.capabilities import CUSTOM_VOICE_LIST_TYPE, ELEMENT_LIST_TYPE, NODE_CATEGORY
-from .api.video_v4 import build_payload, submit_and_wait, validate_material_counts
+from .api.video_v4 import (VIDEO_ELEMENT_TYPES, build_payload, known_duration, read_video_metadata,
+                          submit_and_wait, validate_material_counts, validate_video_duration_total,
+                          validate_video_metadata)
 from .nodes import (_image_batch_to_base64_list, _normalize_element_list, _normalize_voice_list,
-                    _runtime_client, _upload_video_reference)
+                    _runtime_client, _upload_file_to_temporary_media_host)
 
 
 def _common_inputs():
@@ -67,6 +71,33 @@ def _video_url(value):
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("Video references must be HTTP(S) URLs, or connect a VIDEO input.")
     return value
+
+
+def _upload_videos(contents, elements):
+    durations = [known_duration(e.get("video_duration")) for e in elements if e.get("type") in VIDEO_ELEMENT_TYPES]
+    # Unknown element types might be video characters; do not assume a complete total.
+    if any(e.get("type") not in VIDEO_ELEMENT_TYPES | {"image_subject", "multi_image_subject", "image_refer"} for e in elements):
+        durations.append(None)
+    videos = [c for c in contents if c["type"] in {"base_video", "feature_video"}]
+    durations.extend(None for item in videos if isinstance(item["url"], str))
+    videos = [item for item in videos if not isinstance(item["url"], str)]
+    validate_video_duration_total(durations + [None] * len(videos))
+    if not videos:
+        return
+    with tempfile.TemporaryDirectory(prefix="kling4_videos_") as directory:
+        prepared = []
+        for item in videos:
+            comfy.model_management.throw_exception_if_processing_interrupted()
+            path = str(Path(directory) / f'{item["id"]}.mp4')
+            item["url"].save_to(path)
+            metadata = read_video_metadata(path)
+            validate_video_metadata(metadata, item["id"])
+            durations.append(known_duration(metadata.get("duration")))
+            prepared.append((item, path))
+        validate_video_duration_total(durations)
+        for item, path in prepared:
+            comfy.model_management.throw_exception_if_processing_interrupted()
+            item["url"] = _upload_file_to_temporary_media_host(path)
 
 
 def _unify_image_ids(prompt, contents):
@@ -204,14 +235,13 @@ class Kling4OmniVideo(Kling4Image2Video):
         videos.extend(("feature_video", url, next_index + i) for i, url in enumerate(urls))
         for kind, value, index in videos:
             contents.append({"type": kind, "url": value, "id": f"video_{index}"})
-        for index, element in enumerate(_normalize_element_list(element_list) or [], 1):
+        elements = _normalize_element_list(element_list, include_metadata=True) or []
+        for index, element in enumerate(elements, 1):
             contents.append({"type": "element", "element_id": element["element_id"], "id": f"element_{index}"})
         for index, voice in enumerate(_normalize_voice_list(custom_voice_list) or [], 1):
             contents.append({"type": "voice", "voice_id": voice["voice_id"], "id": f"voice_{index}"})
-        validate_material_counts(contents)
+        validate_material_counts(contents, elements)
         prompt, contents = _unify_image_ids(prompt, contents)
-        for item in contents:
-            if item["type"] in {"base_video", "feature_video"} and not isinstance(item["url"], str):
-                item["url"] = _upload_video_reference(item["url"])
+        _upload_videos(contents, elements)
         return _run("omni", prompt, resolution, duration, aspect_ratio, contents,
                     watermark=watermark, callback_url=callback_url, external_task_id=external_task_id)

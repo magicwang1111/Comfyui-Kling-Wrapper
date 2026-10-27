@@ -925,7 +925,7 @@ def _build_tencent_vod_text2video_request(request):
     return request
 
 
-def _normalize_element_reference(element):
+def _normalize_element_reference(element, *, include_metadata=False):
     if element is None:
         return None
     if isinstance(element, dict):
@@ -936,6 +936,18 @@ def _normalize_element_reference(element):
         payload = {"element_id": element_id}
         if element_type:
             payload["type"] = element_type
+        if include_metadata:
+            element_type = element.get("element_type") or element_type
+            if not element_type or element_type == "element":
+                element_type = element.get("reference_type")
+            element_type = {"video_refer": "video_character", "image_refer": "multi_image_subject"}.get(element_type, element_type)
+            if element_type:
+                payload["type"] = element_type
+            duration = element.get("video_duration")
+            if duration is None:
+                duration = element.get("duration")
+            if duration is not None:
+                payload["video_duration"] = duration
         return payload
     if isinstance(element, str):
         element_id = element.strip()
@@ -945,14 +957,14 @@ def _normalize_element_reference(element):
     raise ValueError("Element must be a dict or string.")
 
 
-def _normalize_element_list(elements):
+def _normalize_element_list(elements, *, include_metadata=False):
     if elements is None:
         return None
     if isinstance(elements, dict):
         elements = [elements]
     normalized = []
     for element in elements:
-        payload = _normalize_element_reference(element)
+        payload = _normalize_element_reference(element, include_metadata=include_metadata)
         if payload:
             normalized.append(payload)
     return normalized or None
@@ -972,13 +984,18 @@ def _build_camera_control(camera_control_type, camera_control_config, camera_con
     return camera_control
 
 
-def _element_result_to_payload(data):
+def _element_result_to_payload(data, *, reference_type=None, video_duration=None):
     if data is None:
         return None
     if hasattr(data, "dict"):
-        return data.dict(exclude_none=True)
+        data = data.dict(exclude_none=True)
     if isinstance(data, dict):
-        return {key: value for key, value in data.items() if value is not None}
+        payload = {key: value for key, value in data.items() if value is not None}
+        if reference_type is not None:
+            payload.setdefault("reference_type", reference_type)
+        if reference_type == "video_refer" and video_duration is not None and "duration" not in payload:
+            payload.setdefault("video_duration", video_duration)
+        return payload
     return data
 
 
@@ -3504,6 +3521,7 @@ class AdvancedCustomElementCreateNode:
         element_name = (element_name or "").strip()
         element_description = (element_description or "").strip()
 
+        video_duration = None
         if element_type == "video_character" and reference_video_input is not None:
             video_duration = reference_video_input.get_duration()
             if video_duration > 8:
@@ -3566,6 +3584,8 @@ class AdvancedCustomElementCreateNode:
                 raise ValueError("extra_payload_json must decode to a JSON object.")
             for key, value in extra_payload.items():
                 setattr(generator, key, value)
+            if "element_video_list" in extra_payload:
+                video_duration = None
 
         if not element_description:
             element_description = str(
@@ -3607,10 +3627,12 @@ class AdvancedCustomElementCreateNode:
             )
             with _video_provider(provider) as backend:
                 result = backend.create_element(request)
+            element_payload = _element_result_to_payload(
+                result.element, reference_type=generator.reference_type, video_duration=video_duration)
             return (
-                result.element,
+                element_payload,
                 result.element_id,
-                json.dumps(result.element, ensure_ascii=False),
+                json.dumps(element_payload, ensure_ascii=False),
             )
 
         with _runtime_client() as client:
@@ -3627,7 +3649,8 @@ class AdvancedCustomElementCreateNode:
             )
 
         elements = _extract_elements_from_response(response)
-        element_payload = _element_result_to_payload(elements[0]) if elements else {}
+        element_payload = _element_result_to_payload(
+            elements[0], reference_type=generator.reference_type, video_duration=video_duration) if elements else {}
         element_id = element_payload.get("element_id") or element_payload.get("id") or ""
         if not element_id:
             raise ValueError(
@@ -3787,14 +3810,14 @@ class ElementListBuilderNode:
         element_refs = []
         for element in (element_1, element_2, element_3, element_4):
             if element is not None:
-                element_refs.append(_normalize_element_reference(element))
+                element_refs.append(_normalize_element_reference(element, include_metadata=True))
 
         for raw_line in (extra_element_ids or "").replace(",", "\n").splitlines():
             identifier = raw_line.strip()
             if identifier:
                 element_refs.append({"element_id": identifier})
 
-        normalized = _normalize_element_list(element_refs)
+        normalized = _normalize_element_list(element_refs, include_metadata=True)
         if not normalized:
             raise ValueError("At least one element is required.")
 
