@@ -11,6 +11,7 @@ for path in (ROOT.parent.parent, ROOT):
 
 api = importlib.import_module('py.api.video_v4')
 nodes = importlib.import_module('py.nodes_v4')
+_io = importlib.import_module('comfy_api.latest._io')
 
 
 class Client:
@@ -75,7 +76,7 @@ class VideoV4Tests(unittest.TestCase):
             self.assertIs(package.NODE_CLASS_MAPPINGS['Comfyui-Kling-Wrapper Kling 4.0 ' + label], cls)
             fields = {k for group in cls.INPUT_TYPES().values() for k in group}
             self.assertFalse(fields & {'cfg_scale', 'negative_prompt', 'camera_control', 'sound', 'mode', 'model'})
-            self.assertEqual(cls.RETURN_NAMES, ('url', 'video_id'))
+            self.assertEqual(tuple(cls.RETURN_NAMES), ('url', 'video_id'))
 
     def test_omni_reference_mapping_and_official_client(self):
         client = Client([{'data': {'id': 't'}}, {'data': [{'id': 't', 'status': 'succeeded',
@@ -107,6 +108,37 @@ class VideoV4Tests(unittest.TestCase):
         with patch.object(nodes, '_image_batch_to_base64_list', return_value=['a', 'b']):
             with self.assertRaisesRegex(ValueError, 'single image'):
                 nodes._frames(object(), None, None)
+
+    def test_autogrow_executes_in_numeric_order_with_batches_and_gaps(self):
+        for cls in (nodes.Kling4Image2Video, nodes.Kling4OmniVideo):
+            with self.subTest(node=cls.__name__):
+                live = {'prompt': '@image_1 to @image_5', 'first_frame': ['first'],
+                        'middle_frame.middle_frame_10': ['mid10'],
+                        'middle_frame.middle_frame_2': ['mid2a', 'mid2b'], 'last_frame': ['last']}
+                valid, _, v3_data = _io.get_finalized_class_inputs(cls.INPUT_TYPES(), live)
+                self.assertEqual(valid['optional']['middle_frame.middle_frame_10'][0], 'IMAGE')
+                nested = _io.build_nested_inputs(live, v3_data)
+                with patch.object(nodes, '_image_batch_to_base64_list', side_effect=lambda x: x), patch.object(nodes, '_run', return_value=('url', 'id')) as run:
+                    result = cls.execute(**nested)
+                contents = run.call_args.kwargs.get('contents') or run.call_args.args[5]
+                self.assertEqual([c['url'] for c in contents], ['first', 'mid2a', 'mid2b', 'mid10', 'last'])
+                self.assertEqual([c['id'] for c in contents], [f'image_{n}' for n in range(1, 6)])
+                self.assertEqual(result.result, ('url', 'id'))
+
+    def test_legacy_middle_batch_precedes_dynamic_middle_frames(self):
+        with patch.object(nodes, '_image_batch_to_base64_list', side_effect=lambda x: x):
+            frames = nodes._frames(None, ['legacy1', 'legacy2'], ['last'], {'middle_frame_1': ['new']})
+        self.assertEqual([c['url'] for c in frames], ['legacy1', 'legacy2', 'new', 'last'])
+        self.assertEqual([c['id'] for c in frames], ['middle_frame_1', 'middle_frame_2', 'middle_frame_3', 'last_frame'])
+
+    def test_autogrow_can_be_empty(self):
+        for cls in (nodes.Kling4Image2Video, nodes.Kling4OmniVideo):
+            live = {'prompt': 'test', 'first_frame': ['first']}
+            _, _, v3_data = _io.get_finalized_class_inputs(cls.INPUT_TYPES(), live)
+            nested = _io.build_nested_inputs(live, v3_data)
+            self.assertEqual(nested['middle_frame'], {})
+            with patch.object(nodes, '_image_batch_to_base64_list', side_effect=lambda x: x), patch.object(nodes, '_run', return_value=('url', 'id')):
+                self.assertEqual(cls.execute(**nested).result, ('url', 'id'))
 
     def test_image_requires_material(self):
         with self.assertRaisesRegex(ValueError, 'keyframe'):

@@ -8,6 +8,14 @@ export function stabilizeInputs(node) {
     node.kling4Stabilizing = true;
     try {
         const linked = (name) => node.inputs?.some(i => i.name === name && i.link != null);
+        const middle = node.inputs?.findIndex(i => i.name === "middle_frames" && i.link == null);
+        if (middle >= 0) node.removeInput(middle);
+        if (node.type !== NODE) {
+            const images = updateImageReferences(node);
+            node.kling4ReferencePreview?.setReferences(images.markers.length ? images.markers : images.uncertain ? [] : ["image_1"],
+                IMAGE_ORDER_HELP + (images.uncertain ? " 上游批次张数未知，后续编号执行时确定。" : "") + legacyImageWarning(node));
+            return;
+        }
         const base = linked("base_video") || linked("base_video_url") || !!String(node.widgets?.find(w => w.name === "base_video_url")?.value || "").trim();
         const legacyVideo = linked("feature_video");
         for (const name of ["reference_images", "feature_video"]) {
@@ -64,7 +72,7 @@ function schedule(node) {
 app.registerExtension({
     name: "ComfyuiKlingWrapper.Kling4DynamicInputs",
     beforeRegisterNodeDef(nodeType, data) {
-        if (data.name !== NODE) return;
+        if (![NODE, "Comfyui-Kling-Wrapper Kling 4.0 Image2Video"].includes(data.name)) return;
         for (const event of ["onNodeCreated", "onConfigure", "onConnectionsChange"]) {
             const original = nodeType.prototype[event];
             nodeType.prototype[event] = function () {

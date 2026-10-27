@@ -47,7 +47,10 @@ function batchSize(node, slot, seen = new Set()) {
 }
 
 export function updateImageReferences(node) {
-    const names = ["first_frame", "middle_frames", "last_frame"];
+    const names = ["first_frame", "middle_frames"];
+    names.push(...node.inputs.filter(i => /^middle_frame\.middle_frame_\d+$/.test(i.name))
+        .sort((a, b) => Number(a.name.split("_").at(-1)) - Number(b.name.split("_").at(-1))).map(i => i.name));
+    names.push("last_frame");
     names.push(...node.inputs.filter(i => /^image_\d+$/.test(i.name))
         .sort((a, b) => Number(a.name.split("_")[1]) - Number(b.name.split("_")[1])).map(i => i.name));
     names.push("reference_images");
@@ -58,19 +61,20 @@ export function updateImageReferences(node) {
         const slot = node.inputs.findIndex(i => i.name === name);
         if (slot < 0) continue;
         const input = node.inputs[slot];
+        const label = name.replace(/^middle_frame\./, "");
         delete input.kling4Reference;
         if (input.link == null) {
-            input.label = `${name}（未连接）`;
+            input.label = `${label}（未连接）`;
             continue;
         }
-        const count = ["middle_frames", "reference_images"].includes(name) ? batchSize(node, slot) : 1;
+        const count = ["middle_frames", "reference_images"].includes(name) || name.startsWith("middle_frame.") ? batchSize(node, slot) : 1;
         if (count == null) uncertain = true;
         if (uncertain) {
-            input.label = `${name} → image_N（批次数量待执行确定）`;
+            input.label = `${label} → image_N（批次数量待执行确定）`;
             continue;
         }
         const refs = Array.from({ length: count }, (_, index) => `image_${next + index}`);
-        input.label = `${name} → ${refs.map(id => `@${id}`).join("、")}`;
+        input.label = `${label} → ${refs.map(id => `@${id}`).join("、")}`;
         input.kling4Reference = refs[0];
         markers.push(...refs);
         next += count;

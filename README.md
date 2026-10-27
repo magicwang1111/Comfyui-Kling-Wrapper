@@ -28,14 +28,14 @@ It bundles image generation, text-to-video, image-to-video, multi-image video, a
 | 输入 | 提示词引用 |
 |---|---|
 | `first_frame` 单张首帧 | 有输入时从 `@image_1` 开始 |
-| `middle_frames` 中间帧批次 | 接在首帧之后，每张占用一个 `image_N` |
+| 动态 `middle_frame_1`、`middle_frame_2`… | 连接后自动增加接口，支持单张或批次；接在首帧之后，每张占用一个 `image_N` |
 | `last_frame` 单张尾帧 | 接在全部中间帧之后 |
 | 动态 `image_1`、`image_2`…或旧 `reference_images` 批次 | 接在全部关键帧之后，查看接口旁实际引用号；接口名不等于最终 ID |
 | 视频：`base_video` 或 `base_video_url`，然后 `feature_video`，然后 `feature_video_urls` 每行一个 URL | 按上述顺序编号 `@video_1`、`@video_2`… |
 | `element_list` 主体列表 | `@element_1`、`@element_2`… |
 | `custom_voice_list` 音色列表 | `@voice_1`、`@voice_2`… |
 
-所有图片统一按首帧→中间帧批次→尾帧→参考图顺序连续编号，未连接的图片不占号。例如首中尾各一张，再接两张参考图，就是 image_1 到 image_5。待编辑视频只能选择 `base_video` 或 `base_video_url` 之一；VIDEO 输入沿用现有上传服务，图片通过 base64 发送。素材数量、视频规格等服务端限制以所附 4.0 文档为准。
+所有图片统一按首帧→中间帧→尾帧→参考图顺序连续编号，未连接的图片不占号。图生和全能节点均使用 ComfyUI 原生动态中间帧接口，无需先合并 Image Batch；旧工作流已连接的 `middle_frames` 批次仍可使用，排在动态中间帧之前。例如首中尾各一张，再接两张参考图，就是 image_1 到 image_5。待编辑视频只能选择 `base_video` 或 `base_video_url` 之一；VIDEO 输入沿用现有上传服务，图片通过 base64 发送。素材数量、视频规格等服务端限制以所附 4.0 文档为准。
 
 全能节点现使用与 Seedance 相同的动态连接交互：接上 `image_1` 后自动出现下一个图片口，接上 `feature_video_1` 后自动出现下一个特征视频口。连接口旁显示真实 `@image_N / @video_N` 引用；移除中间图片时保留接口名称，但实际图片 ID 会重新连续分配；特征视频仍保留自身接口编号。增删关键帧、改变批次张数或参考图后，请按新标签检查提示词。接入或移除 `base_video`（包括 URL）会改变特征视频的引用偏移，界面会同步提示，请对应检查提示词。`base_video` 存在时固定为 `@video_1`，第一个特征视频为 `@video_2`；不存在时第一个特征视频为 `@video_1`。
 

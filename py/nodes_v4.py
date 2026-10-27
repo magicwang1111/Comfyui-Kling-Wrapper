@@ -2,6 +2,7 @@ from urllib.parse import urlsplit
 import re
 
 import comfy.model_management
+from comfy_api.latest import io
 
 from .api.capabilities import CUSTOM_VOICE_LIST_TYPE, ELEMENT_LIST_TYPE, NODE_CATEGORY
 from .api.video_v4 import build_payload, submit_and_wait, validate_material_counts
@@ -24,24 +25,38 @@ def _common_inputs():
     }
 
 
-def _frame_inputs():
-    return {
-        "first_frame": ("IMAGE", {"tooltip": "单张首帧，所有图片按首帧→中间帧→尾帧→参考图统一编号。"}),
-        "middle_frames": ("IMAGE", {"tooltip": "中间帧批次，每张占用一个 image_N 编号；接在首帧之后。"}),
-        "last_frame": ("IMAGE", {"tooltip": "单张尾帧，接在所有中间帧之后编号。"}),
-    }
+def _frame_schema_inputs():
+    return [
+        io.String.Input("prompt", multiline=True, default="", tooltip="用 @image_1、@video_1、@element_1、@voice_1 引用对应素材。"),
+        io.Combo.Input("resolution", options=["720p", "1080p"], default="1080p"),
+        io.Combo.Input("duration", options=["auto"] + [str(n) for n in range(3, 31)], default="10"),
+        io.Boolean.Input("watermark", default=False, optional=True),
+        io.String.Input("callback_url", default="", optional=True),
+        io.String.Input("external_task_id", default="", optional=True),
+        io.Image.Input("first_frame", optional=True, tooltip="单张首帧，所有图片按首帧→中间帧→尾帧→参考图统一编号。"),
+        io.Image.Input("middle_frames", optional=True, tooltip="旧工作流的中间帧批次，排在动态中间帧之前。"),
+        io.Autogrow.Input("middle_frame", optional=True, template=io.Autogrow.TemplateNames(
+            io.Image.Input("frame", tooltip="中间帧，连接后自动增加接口；支持单张或批次，按接口顺序编号。"),
+            names=[f"middle_frame_{n}" for n in range(1, 11)], min=0)),
+        io.Image.Input("last_frame", optional=True, tooltip="单张尾帧，接在所有中间帧之后编号。"),
+    ]
 
 
-def _frames(first_frame, middle_frames, last_frame):
+def _frames(first_frame, middle_frames, last_frame, middle_frame=None):
     contents = []
-    for kind, images in (("first_frame", first_frame), ("middle_frame", middle_frames), ("last_frame", last_frame)):
+    middle = [("middle_frame", images) for name, images in sorted(
+        (middle_frame or {}).items(), key=lambda item: int(item[0].rsplit("_", 1)[1]))]
+    middle_index = 0
+    for kind, images in [("first_frame", first_frame), ("middle_frame", middle_frames), *middle, ("last_frame", last_frame)]:
         if images is None:
             continue
         encoded = _image_batch_to_base64_list(images)
         if kind != "middle_frame" and len(encoded) != 1:
             raise ValueError(f"{kind} requires a single image; use middle_frames for a batch.")
-        for index, value in enumerate(encoded, 1):
-            identifier = f"middle_frame_{index}" if kind == "middle_frame" else kind
+        for value in encoded:
+            if kind == "middle_frame":
+                middle_index += 1
+            identifier = f"middle_frame_{middle_index}" if kind == "middle_frame" else kind
             contents.append({"type": kind, "url": value, "id": identifier})
     return contents
 
@@ -99,51 +114,61 @@ class Kling4Text2Video:
                     watermark=watermark, callback_url=callback_url, external_task_id=external_task_id)
 
 
-class Kling4Image2Video(Kling4Text2Video):
+class Kling4Image2Video(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls):
-        inputs = _common_inputs()
-        inputs["optional"].update(_frame_inputs())
-        return inputs
+    def define_schema(cls):
+        return io.Schema(
+            node_id="Comfyui-Kling-Wrapper Kling 4.0 Image2Video",
+            category=NODE_CATEGORY + "/Kling 4.0",
+            inputs=_frame_schema_inputs(),
+            outputs=[io.String.Output(display_name="url"), io.String.Output(display_name="video_id")],
+        )
+
+    @classmethod
+    def execute(cls, **kwargs):
+        return io.NodeOutput(*cls().generate(**kwargs))
 
     def generate(self, prompt, resolution="1080p", duration="10", first_frame=None,
-                 middle_frames=None, last_frame=None, watermark=False, callback_url="", external_task_id=""):
-        prompt, contents = _unify_image_ids(prompt, _frames(first_frame, middle_frames, last_frame))
+                 middle_frames=None, last_frame=None, watermark=False, callback_url="", external_task_id="", middle_frame=None):
+        prompt, contents = _unify_image_ids(prompt, _frames(first_frame, middle_frames, last_frame, middle_frame))
         return _run("image", prompt, resolution, duration,
                     contents=contents,
                     watermark=watermark, callback_url=callback_url, external_task_id=external_task_id)
 
 
-class Kling4OmniVideo(Kling4Text2Video):
+class Kling4OmniVideo(Kling4Image2Video):
     @classmethod
-    def INPUT_TYPES(cls):
-        inputs = _common_inputs()
-        inputs["required"]["aspect_ratio"] = (["adaptive", "21:9", "16:9", "9:16", "1:1"], {"default": "adaptive"})
-        inputs["optional"].update(_frame_inputs())
-        inputs["optional"].update({
-            "reference_images": ("IMAGE", {"tooltip": "旧参考图片批次，接在关键帧之后统一分配 image_N。"}),
-            "base_video": ("VIDEO", {"tooltip": "待编辑视频；有此输入时为 @video_1。与 base_video_url 二选一。"}),
-            "base_video_url": ("STRING", {"default": ""}),
-            "feature_video": ("VIDEO", {"tooltip": "特征参考视频；接在 base_video 后编号，无 base_video 时为 @video_1。"}),
-            "feature_video_urls": ("STRING", {"multiline": True, "default": "", "tooltip": "每行一个特征视频 URL，接在 VIDEO 输入之后继续编号。"}),
-            "element_list": (ELEMENT_LIST_TYPE, {"tooltip": "现有主体列表：@element_1、@element_2…"}),
-            "custom_voice_list": (CUSTOM_VOICE_LIST_TYPE, {"tooltip": "现有音色列表：@voice_1、@voice_2…"}),
-        })
+    def define_schema(cls):
+        inputs = _frame_schema_inputs()
+        inputs.insert(3, io.Combo.Input("aspect_ratio", options=["adaptive", "21:9", "16:9", "9:16", "1:1"], default="adaptive"))
+        inputs.extend([
+            io.Image.Input("reference_images", optional=True, tooltip="旧参考图片批次，接在关键帧之后统一分配 image_N。"),
+            io.Video.Input("base_video", optional=True, tooltip="待编辑视频；有此输入时为 @video_1。与 base_video_url 二选一。"),
+            io.String.Input("base_video_url", optional=True, default=""),
+            io.Video.Input("feature_video", optional=True, tooltip="特征参考视频；接在 base_video 后编号，无 base_video 时为 @video_1。"),
+            io.String.Input("feature_video_urls", optional=True, multiline=True, default="", tooltip="每行一个特征视频 URL，接在 VIDEO 输入之后继续编号。"),
+            io.Custom(ELEMENT_LIST_TYPE).Input("element_list", optional=True, tooltip="现有主体列表：@element_1、@element_2…"),
+            io.Custom(CUSTOM_VOICE_LIST_TYPE).Input("custom_voice_list", optional=True, tooltip="现有音色列表：@voice_1、@voice_2…"),
+        ])
         for index in range(1, 11):
-            inputs["optional"][f"image_{index}"] = ("IMAGE", {"tooltip": "单张参考图；引用编号在所有关键帧之后，查看接口旁标签。"})
+            inputs.append(io.Image.Input(f"image_{index}", optional=True, tooltip="单张参考图；引用编号在所有关键帧之后，查看接口旁标签。"))
         for index in range(1, 6):
-            inputs["optional"][f"feature_video_{index}"] = ("VIDEO", {"tooltip": "参考视频，实际 @video 编号显示在连接口旁。"})
-        return inputs
+            inputs.append(io.Video.Input(f"feature_video_{index}", optional=True, tooltip="参考视频，实际 @video 编号显示在连接口旁。"))
+        return io.Schema(
+            node_id="Comfyui-Kling-Wrapper Kling 4.0 OmniVideo",
+            category=NODE_CATEGORY + "/Kling 4.0", inputs=inputs,
+            outputs=[io.String.Output(display_name="url"), io.String.Output(display_name="video_id")],
+        )
 
     def generate(self, prompt, resolution="1080p", duration="10", aspect_ratio="adaptive",
                  first_frame=None, middle_frames=None, last_frame=None, reference_images=None,
                  base_video=None, base_video_url="", feature_video=None, feature_video_urls="",
-                 element_list=None, custom_voice_list=None, watermark=False, callback_url="", external_task_id="", **dynamic_inputs):
+                 element_list=None, custom_voice_list=None, watermark=False, callback_url="", external_task_id="", middle_frame=None, **dynamic_inputs):
         if base_video is not None and base_video_url.strip():
             raise ValueError("Provide base_video or base_video_url, not both.")
         urls = [_video_url(line) for line in feature_video_urls.splitlines() if line.strip()]
         base_url = _video_url(base_video_url) if base_video_url.strip() else None
-        contents = _frames(first_frame, middle_frames, last_frame)
+        contents = _frames(first_frame, middle_frames, last_frame, middle_frame)
         dynamic_images = []
         dynamic_videos = []
         for name, value in dynamic_inputs.items():
