@@ -11,7 +11,10 @@ from types import ModuleType, SimpleNamespace
 from unittest import mock
 
 import httpx
+import numpy
+from PIL import Image
 import requests
+import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +70,54 @@ ENV_KEYS = {
 
 
 class BackendConfigTests(unittest.TestCase):
+    def test_tensor_images_preserve_pixels_and_input(self):
+        for dtype in (torch.float16, torch.float32, torch.float64):
+            for channels in (3, 4):
+                with self.subTest(dtype=dtype, channels=channels):
+                    tensor = torch.linspace(-0.2, 1.2, 3 * 17 * 19 * channels, dtype=dtype).reshape(3, 17, 19, channels).transpose(1, 2)
+                    original = tensor.clone()
+                    expected = numpy.clip(tensor.numpy() * 255.0, 0.0, 255.0).astype(numpy.uint8)
+                    result = kling_nodes._tensor2images(tensor)
+                    self.assertEqual(len(result), len(expected))
+                    for actual, pixels in zip(result, expected):
+                        numpy.testing.assert_array_equal(numpy.asarray(actual), pixels)
+                    self.assertTrue(torch.equal(tensor, original))
+
+    def test_upload_images_converts_one_frame_at_a_time(self):
+        tensor = torch.linspace(0, 1, 3 * 17 * 19 * 3).reshape(3, 17, 19, 3)
+        expected = numpy.clip(tensor.numpy() * 255.0, 0.0, 255.0).astype(numpy.uint8)
+        paths = []
+
+        def upload(path):
+            with Image.open(path) as image:
+                numpy.testing.assert_array_equal(numpy.asarray(image), expected[len(paths)])
+            paths.append(path)
+            return f"https://example.com/{len(paths)}.png"
+
+        with mock.patch.object(kling_nodes, "_tensor2images", wraps=kling_nodes._tensor2images) as convert:
+            with mock.patch.object(kling_nodes, "_upload_file_to_temporary_media_host", side_effect=upload):
+                result = kling_nodes._upload_image_batch_references(tensor)
+        self.assertEqual(result, [f"https://example.com/{index}.png" for index in (1, 2, 3)])
+        self.assertEqual([call.args[0].shape[0] for call in convert.call_args_list], [1, 1, 1])
+        self.assertTrue(all(not Path(path).exists() for path in paths))
+
+    def test_upload_image_failure_cleans_temp_file(self):
+        paths = []
+
+        def fail(path):
+            paths.append(path)
+            raise RuntimeError("upload failed")
+
+        with mock.patch.object(kling_nodes, "_upload_file_to_temporary_media_host", side_effect=fail):
+            with self.assertRaisesRegex(RuntimeError, "upload failed"):
+                kling_nodes._upload_image_batch_references(torch.zeros(3, 2, 2, 3))
+        self.assertEqual(len(paths), 1)
+        self.assertFalse(Path(paths[0]).exists())
+
+    def test_empty_image_conversion(self):
+        self.assertEqual(kling_nodes._tensor2images(torch.empty(0, 2, 2, 3)), [])
+        self.assertEqual(kling_nodes._upload_image_batch_references(None), [])
+
     def setUp(self):
         # Unit tests must not inherit the developer machine's active provider
         # or credentials from config.local.json.
@@ -1896,13 +1947,13 @@ class BackendConfigTests(unittest.TestCase):
             self.assertTrue(Path(path).is_file())
             return f"https://cdn.example.com/{len(uploaded_paths)}.png"
 
-        with mock.patch.object(kling_nodes, "_tensor2images", return_value=frames):
+        with mock.patch.object(kling_nodes, "_tensor2images", side_effect=[[frame] for frame in frames]):
             with mock.patch.object(
                 kling_nodes,
                 "_upload_file_to_temporary_media_host",
                 side_effect=fake_upload,
             ):
-                urls = kling_nodes._upload_image_batch_references(object())
+                urls = kling_nodes._upload_image_batch_references(torch.zeros(2, 2, 2, 3))
 
         self.assertEqual(
             urls,

@@ -554,8 +554,12 @@ def _fetch_image(url, stream=True):
 
 
 def _tensor2images(tensor):
-    np_imgs = numpy.clip(tensor.cpu().numpy() * 255.0, 0.0, 255.0).astype(numpy.uint8)
-    return [PIL.Image.fromarray(np_img) for np_img in np_imgs]
+    images = []
+    for frame in tensor:
+        pixels = frame.cpu().numpy() * 255.0
+        numpy.clip(pixels, 0.0, 255.0, out=pixels)
+        images.append(PIL.Image.fromarray(pixels.astype(numpy.uint8)))
+    return images
 
 
 def _images2tensor(images):
@@ -606,7 +610,8 @@ def _upload_image_batch_references(image):
         return []
 
     uploaded_urls = []
-    for frame in _tensor2images(image):
+    for index in range(image.shape[0]):
+        frame = _tensor2images(image[index:index + 1])[0]
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
             temp_path = handle.name
 
