@@ -1,5 +1,6 @@
 from urllib.parse import urlsplit
 from pathlib import Path
+import base64
 import re
 import tempfile
 
@@ -12,6 +13,29 @@ from .api.video_v4 import (VIDEO_ELEMENT_TYPES, build_payload, known_duration, r
                           validate_video_metadata)
 from .nodes import (_image_batch_to_base64_list, _normalize_element_list, _normalize_voice_list,
                     _runtime_client, _upload_file_to_temporary_media_host)
+from .image_files import original_image_files, required_image_inputs
+
+
+def _image_inputs(values, lazy=False):
+    images = {name: value for name, value in values.items()
+              if name in {"first_frame", "middle_frames", "last_frame", "reference_images"}
+              or re.fullmatch(r"image_\d+", name)}
+    middle = values.get("middle_frame")
+    if lazy and isinstance(middle, tuple):
+        middle = middle[0]
+    for name, value in (middle or {}).items():
+        if lazy:
+            image, key = value
+            images[key] = image
+        else:
+            images[f"middle_frame.{name}"] = value
+    return images
+
+
+def _encode_images(images, files=None):
+    if files is not None:
+        return [base64.b64encode(Path(path).read_bytes()).decode("ascii") for path in files]
+    return _image_batch_to_base64_list(images)
 
 
 def _common_inputs():
@@ -37,24 +61,31 @@ def _frame_schema_inputs():
         io.Boolean.Input("watermark", default=False, optional=True),
         io.String.Input("callback_url", default="", optional=True),
         io.String.Input("external_task_id", default="", optional=True),
-        io.Image.Input("first_frame", optional=True, tooltip="单张首帧，所有图片按首帧→中间帧→尾帧→参考图统一编号。"),
-        io.Image.Input("middle_frames", optional=True, tooltip="旧工作流的中间帧批次，排在动态中间帧之前。"),
+        io.Image.Input("first_frame", optional=True, lazy=True, tooltip="单张首帧，所有图片按首帧→中间帧→尾帧→参考图统一编号。"),
+        io.Image.Input("middle_frames", optional=True, lazy=True, tooltip="旧工作流的中间帧批次，排在动态中间帧之前。"),
         io.Autogrow.Input("middle_frame", optional=True, template=io.Autogrow.TemplateNames(
-            io.Image.Input("frame", tooltip="中间帧，连接后自动增加接口；支持单张或批次，按接口顺序编号。"),
+            io.Image.Input("frame", lazy=True, tooltip="中间帧，连接后自动增加接口；支持单张或批次，按接口顺序编号。"),
             names=[f"middle_frame_{n}" for n in range(1, 11)], min=0)),
-        io.Image.Input("last_frame", optional=True, tooltip="单张尾帧，接在所有中间帧之后编号。"),
+        io.Image.Input("last_frame", optional=True, lazy=True, tooltip="单张尾帧，接在所有中间帧之后编号。"),
     ]
 
 
-def _frames(first_frame, middle_frames, last_frame, middle_frame=None):
+def _frames(first_frame, middle_frames, last_frame, middle_frame=None, original_files=None):
+    original_files = original_files or {}
     contents = []
-    middle = [("middle_frame", images) for name, images in sorted(
-        (middle_frame or {}).items(), key=lambda item: int(item[0].rsplit("_", 1)[1]))]
+    middle_values = dict(middle_frame or {})
+    for key in original_files:
+        if key.startswith("middle_frame."):
+            middle_values.setdefault(key.removeprefix("middle_frame."), None)
+    middle = [("middle_frame", f"middle_frame.{name}", images) for name, images in sorted(
+        middle_values.items(), key=lambda item: int(item[0].rsplit("_", 1)[1]))]
     middle_index = 0
-    for kind, images in [("first_frame", first_frame), ("middle_frame", middle_frames), *middle, ("last_frame", last_frame)]:
-        if images is None:
+    for kind, key, images in [("first_frame", "first_frame", first_frame),
+                              ("middle_frame", "middle_frames", middle_frames), *middle,
+                              ("last_frame", "last_frame", last_frame)]:
+        if images is None and key not in original_files:
             continue
-        encoded = _image_batch_to_base64_list(images)
+        encoded = _encode_images(images, original_files.get(key))
         if kind != "middle_frame" and len(encoded) != 1:
             raise ValueError(f"{kind} requires a single image; use middle_frames for a batch.")
         for value in encoded:
@@ -152,16 +183,34 @@ class Kling4Image2Video(io.ComfyNode):
             node_id="Comfyui-Kling-Wrapper Kling 4.0 Image2Video",
             category=NODE_CATEGORY + "/Kling 4.0",
             inputs=_frame_schema_inputs(),
+            hidden=[io.Hidden.dynprompt, io.Hidden.unique_id],
             outputs=[io.String.Output(display_name="url"), io.String.Output(display_name="video_id")],
         )
 
     @classmethod
+    def check_lazy_status(cls, **kwargs):
+        hidden = cls.hidden
+        return required_image_inputs(hidden.dynprompt if hidden else None,
+                                     hidden.unique_id if hidden else None,
+                                     _image_inputs(kwargs, lazy=True))
+
+    @classmethod
     def execute(cls, **kwargs):
-        return io.NodeOutput(*cls().generate(**kwargs))
+        files = {}
+        if cls.hidden is not None:
+            for name, image in _image_inputs(kwargs).items():
+                if image is None:
+                    paths = original_image_files(cls.hidden.dynprompt, cls.hidden.unique_id, name)
+                    if paths is not None:
+                        files[name] = paths
+                    elif name in cls.hidden.dynprompt.get_node(cls.hidden.unique_id)["inputs"]:
+                        raise ValueError("Reference image changed before upload; run the workflow again.")
+        return io.NodeOutput(*cls().generate(**kwargs, original_files=files))
 
     def generate(self, prompt, resolution="1080p", duration="10", first_frame=None,
-                 middle_frames=None, last_frame=None, watermark=False, callback_url="", external_task_id="", middle_frame=None):
-        prompt, contents = _unify_image_ids(prompt, _frames(first_frame, middle_frames, last_frame, middle_frame))
+                 middle_frames=None, last_frame=None, watermark=False, callback_url="", external_task_id="", middle_frame=None,
+                 original_files=None):
+        prompt, contents = _unify_image_ids(prompt, _frames(first_frame, middle_frames, last_frame, middle_frame, original_files))
         return _run("image", prompt, resolution, duration,
                     contents=contents,
                     watermark=watermark, callback_url=callback_url, external_task_id=external_task_id)
@@ -173,7 +222,7 @@ class Kling4OmniVideo(Kling4Image2Video):
         inputs = _frame_schema_inputs()
         inputs.insert(3, io.Combo.Input("aspect_ratio", options=["adaptive", "21:9", "16:9", "9:16", "1:1"], default="adaptive"))
         inputs.extend([
-            io.Image.Input("reference_images", optional=True, tooltip="旧参考图片批次，接在关键帧之后统一分配 image_N。"),
+            io.Image.Input("reference_images", optional=True, lazy=True, tooltip="旧参考图片批次，接在关键帧之后统一分配 image_N。"),
             io.Video.Input("base_video", optional=True, tooltip="待编辑视频；有此输入时为 @video_1。与 base_video_url 二选一。"),
             io.String.Input("base_video_url", optional=True, default=""),
             io.Video.Input("feature_video", optional=True, tooltip="特征参考视频；接在 base_video 后编号，无 base_video 时为 @video_1。"),
@@ -182,28 +231,32 @@ class Kling4OmniVideo(Kling4Image2Video):
             io.Custom(CUSTOM_VOICE_LIST_TYPE).Input("custom_voice_list", optional=True, tooltip="现有音色列表：@voice_1、@voice_2…"),
         ])
         for index in range(1, 11):
-            inputs.append(io.Image.Input(f"image_{index}", optional=True, tooltip="单张参考图；引用编号在所有关键帧之后，查看接口旁标签。"))
+            inputs.append(io.Image.Input(f"image_{index}", optional=True, lazy=True, tooltip="单张参考图；引用编号在所有关键帧之后，查看接口旁标签。"))
         for index in range(1, 6):
             inputs.append(io.Video.Input(f"feature_video_{index}", optional=True, tooltip="参考视频，实际 @video 编号显示在连接口旁。"))
         return io.Schema(
             node_id="Comfyui-Kling-Wrapper Kling 4.0 OmniVideo",
             category=NODE_CATEGORY + "/Kling 4.0", inputs=inputs,
+            hidden=[io.Hidden.dynprompt, io.Hidden.unique_id],
             outputs=[io.String.Output(display_name="url"), io.String.Output(display_name="video_id")],
         )
 
     def generate(self, prompt, resolution="1080p", duration="10", aspect_ratio="adaptive",
                  first_frame=None, middle_frames=None, last_frame=None, reference_images=None,
                  base_video=None, base_video_url="", feature_video=None, feature_video_urls="",
-                 element_list=None, custom_voice_list=None, watermark=False, callback_url="", external_task_id="", middle_frame=None, **dynamic_inputs):
+                 element_list=None, custom_voice_list=None, watermark=False, callback_url="", external_task_id="", middle_frame=None,
+                 original_files=None, **dynamic_inputs):
+        original_files = original_files or {}
         if base_video is not None and base_video_url.strip():
             raise ValueError("Provide base_video or base_video_url, not both.")
         urls = [_video_url(line) for line in feature_video_urls.splitlines() if line.strip()]
         base_url = _video_url(base_video_url) if base_video_url.strip() else None
-        contents = _frames(first_frame, middle_frames, last_frame, middle_frame)
+        contents = _frames(first_frame, middle_frames, last_frame, middle_frame, original_files)
         dynamic_images = []
         dynamic_videos = []
-        for name, value in dynamic_inputs.items():
-            if value is None:
+        image_files = {name: None for name in original_files if re.fullmatch(r"image_\d+", name)}
+        for name, value in (image_files | dynamic_inputs).items():
+            if value is None and name not in original_files:
                 continue
             match = re.fullmatch(r"(image|feature_video)_([1-9]\d*)", name)
             if not match:
@@ -212,15 +265,15 @@ class Kling4OmniVideo(Kling4Image2Video):
             if index > (10 if kind == "image" else 5):
                 raise ValueError(f"Kling 4.0 input index out of range: {name}")
             (dynamic_images if kind == "image" else dynamic_videos).append((index, value))
-        if dynamic_images and reference_images is not None:
+        if dynamic_images and (reference_images is not None or "reference_images" in original_files):
             raise ValueError("Use image_N inputs or legacy reference_images, not both.")
         for index, image in sorted(dynamic_images):
-            encoded = _image_batch_to_base64_list(image)
+            encoded = _encode_images(image, original_files.get(f"image_{index}"))
             if len(encoded) != 1:
                 raise ValueError(f"image_{index} requires a single image; connect each reference separately.")
             contents.append({"type": "refer_image", "url": encoded[0], "id": f"image_{index}"})
-        if reference_images is not None:
-            for index, value in enumerate(_image_batch_to_base64_list(reference_images), 1):
+        if reference_images is not None or "reference_images" in original_files:
+            for index, value in enumerate(_encode_images(reference_images, original_files.get("reference_images")), 1):
                 contents.append({"type": "refer_image", "url": value, "id": f"image_{index}"})
         videos = []
         if base_video is not None or base_url:

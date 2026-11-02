@@ -9,6 +9,7 @@ from .api.capabilities import CUSTOM_VOICE_LIST_TYPE, DEFAULT_IMAGE_RESOLUTIONS,
     VIDEO_GENERATION_MODES, get_image_capability, get_video_capability, validate_image_generation_request, \
     validate_video_generation_request
 from .api.exceptions import KLingAPIError
+from .image_files import original_image_files, required_image_inputs
 from .api.providers import (
     OFFICIAL_PROVIDER,
     TENCENT_VOD_PROVIDER,
@@ -3494,13 +3495,14 @@ class AdvancedCustomElementCreateNode:
                 "element_description": ("STRING", {"multiline": True, "default": ""}),
             },
             "optional": {
-                "image": ("IMAGE",),
-                "image_list": ("IMAGE",),
+                "image": ("IMAGE", {"lazy": True}),
+                "image_list": ("IMAGE", {"lazy": True}),
                 "video_url": ("STRING", {"multiline": False, "default": ""}),
                 "element_voice_id": ("STRING", {"multiline": False, "default": ""}),
                 "extra_payload_json": ("STRING", {"multiline": True, "default": ""}),
                 "reference_video_input": ("VIDEO", {"tooltip": "连接 Load Video，主体资产视频不能超过 8 秒；超长将提示更换，不自动截断。video_character 模式下优先使用此输入，否则使用 video_url。"}),
-            }
+            },
+            "hidden": {"dynprompt": "DYNPROMPT", "unique_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = (ELEMENT_TYPE, "STRING", "STRING")
@@ -3508,6 +3510,10 @@ class AdvancedCustomElementCreateNode:
     FUNCTION = "create"
     OUTPUT_NODE = False
     CATEGORY = NODE_CATEGORY
+
+    def check_lazy_status(self, dynprompt=None, unique_id=None, **kwargs):
+        images = {name: kwargs[name] for name in ("image", "image_list") if name in kwargs}
+        return required_image_inputs(dynprompt, unique_id, images)
 
     def create(
             self,
@@ -3521,6 +3527,8 @@ class AdvancedCustomElementCreateNode:
             element_voice_id="",
             extra_payload_json="",
             reference_video_input=None,
+            dynprompt=None,
+            unique_id=None,
     ):
         provider = _resolve_video_provider(provider)
         generator = AdvancedCustomElements()
@@ -3541,10 +3549,15 @@ class AdvancedCustomElementCreateNode:
             generator.reference_type = "video_refer"
 
         merged_image_list = []
-        if image is not None:
-            merged_image_list.extend(_upload_image_batch_references(image))
-        if image_list is not None:
-            merged_image_list.extend(_upload_image_batch_references(image_list))
+        for name, value in (("image", image), ("image_list", image_list)):
+            if value is not None:
+                merged_image_list.extend(_upload_image_batch_references(value))
+            else:
+                files = original_image_files(dynprompt, unique_id, name)
+                if files is not None:
+                    merged_image_list.extend(_upload_file_to_temporary_media_host(path) for path in files)
+                elif dynprompt is not None and name in dynprompt.get_node(unique_id)["inputs"]:
+                    raise ValueError("Reference image changed before upload; run the workflow again.")
 
         if element_type in ("image_subject", "multi_image_subject"):
             # Kling's advanced element API requires one frontal image plus 1-3

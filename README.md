@@ -102,6 +102,12 @@ Visible video generation modes:
 
 Documented newer models such as `kling-image-o1` and `kling-video-o1` still exist in the internal capability map, but are hidden from the UI until live endpoint support is confirmed for normal accounts.
 
+## Original image uploads
+
+`Advanced Element Create` and the Kling 4.0 image/video nodes can use original JPEG/PNG files from `LoadImage`, including equal-size `Batch Images` inputs, without decoding them into tensors. Existing inputs and workflow connections stay the same. Subject images upload as files; Kling 4.0 sends the original file bytes as base64.
+
+This applies to RGB images in the current input directory. Rotated EXIF images, PNGs with EXIF, transparent or animated images, mixed-size batches, and processed images keep the existing tensor path. If another branch needs the image tensor, that branch still loads it.
+
 ## Important limitations
 
 - Native 4K video output is exposed through the video `mode` dropdown. Models that do not support `mode=4k` will be rejected by the node capability checks before submission.
